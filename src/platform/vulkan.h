@@ -2,13 +2,34 @@
 #pragma once
 
 #include <SDL2/SDL.h>
-#include <lib/lib.h>
+#include <vector>
+#include <array>
 #include <vulkan/vulkan.h>
+#include <lib/mathlib.h>
 
 namespace VK {
 
-static constexpr char vk_name[] = "Vulkan";
-using alloc = Mallocator<vk_name>;
+class Mesh {
+public:
+    typedef unsigned int Index;
+    struct Vert {
+        Vec3 pos;
+        Vec3 norm;
+    };
+
+    Mesh() = default;
+    Mesh(std::vector<Vert>&& vertices, std::vector<Index>&& indices) : _verts(std::move(vertices)), _idxs(std::move(indices)) {}
+    Mesh(const Mesh& src) = delete;
+    Mesh(Mesh&& src) = default;
+    ~Mesh() = default;
+
+    Mesh& operator=(const Mesh& src) = delete;
+    Mesh& operator=(Mesh&& src) = default;
+
+private:
+    std::vector<Vert> _verts;
+    std::vector<Index> _idxs;
+};
 
 // For rendering quad, move to abstraction
 struct Vertex {
@@ -16,7 +37,7 @@ struct Vertex {
     Vec3 color;
     Vec2 tex_coord;
     static VkVertexInputBindingDescription bind_desc();
-    static Array<VkVertexInputAttributeDescription, 3> attr_descs();
+    static std::array<VkVertexInputAttributeDescription, 3> attr_descs();
 };
 
 struct Uniforms {
@@ -30,19 +51,19 @@ struct GPU {
     VkPhysicalDeviceProperties dev_prop = {};
     VkPhysicalDeviceMemoryProperties mem_prop = {};
 
-    Vec<VkPresentModeKHR, alloc> modes;
-    Vec<VkSurfaceFormatKHR, alloc> fmts;
-    Vec<VkExtensionProperties, alloc> exts;
-    Vec<VkQueueFamilyProperties, alloc> queue_families;
+    std::vector<VkPresentModeKHR> modes;
+    std::vector<VkSurfaceFormatKHR> fmts;
+    std::vector<VkExtensionProperties> exts;
+    std::vector<VkQueueFamilyProperties> queue_families;
 
-    i32 graphics_idx = 0, present_idx = 0;
-    bool supports(const Vec<const char*, alloc>& extensions);
+    int graphics_idx = 0, present_idx = 0;
+    bool supports(const std::vector<const char*>& extensions);
 };
 
 struct Info {
     VkInstance instance = {};
-    Vec<VkExtensionProperties, alloc> extensions;
-    Vec<const char*, alloc> inst_ext, dev_ext, layers;
+    std::vector<VkExtensionProperties> extensions;
+    std::vector<const char*> inst_ext, dev_ext, layers;
     VkDebugUtilsMessengerEXT debug_callback_info = {};
 };
 
@@ -60,24 +81,24 @@ struct Swapchain {
     VkSwapchainKHR swapchain = {};
     VkSurfaceFormatKHR format = {};
     VkPresentModeKHR present_mode = {};
-    Vec<Swapchain_Image, alloc> images;
+    std::vector<Swapchain_Image> images;
 
-    f32 aspect_ratio();
-    Pair<u32,u32> dim();
+    float aspect_ratio();
+    std::pair<unsigned int,unsigned int> dim();
 };
 
 struct Frame {
     VkFence fence;
     VkSemaphore avail, finish;
     VkCommandBuffer primary;
-    Vec<VkCommandBuffer, alloc> secondary;
-    static constexpr u32 MAX_IN_FLIGHT = 2;
+    std::vector<VkCommandBuffer> secondary;
+    static constexpr unsigned int MAX_IN_FLIGHT = 2;
 };
 
-using Frames = Vec<Frame, alloc>;
+using Frames = std::vector<Frame>;
 
 struct Current_GPU {
-    GPU* data = null;
+    GPU* data = nullptr;
     VkDevice device = {};
     VkQueue graphics_queue = {}, present_queue = {};
 };
@@ -96,21 +117,21 @@ private:
     // move this into real abstractions lole
     // for rendering quad
     VkDescriptorSetLayout descriptor_layout;
-    Pair<VkBuffer, VkDeviceMemory> vertex_buffer, index_buffer;
-    Pair<VkImage, VkDeviceMemory> texture;
+    std::pair<VkBuffer, VkDeviceMemory> vertex_buffer, index_buffer;
+    std::pair<VkImage, VkDeviceMemory> texture;
     VkImageView texture_view;
     VkSampler texture_sampler;
 
     // per frame in flight
-    Vec<VkDescriptorSet, alloc> descriptor_sets;
-    Vec<Pair<VkBuffer, VkDeviceMemory>, alloc> uniform_buffers;
+    std::vector<VkDescriptorSet> descriptor_sets;
+    std::vector<std::pair<VkBuffer, VkDeviceMemory>> uniform_buffers;
     // basic pipeline for rendering quad
     VkPipeline graphics_pipeline;
     VkPipelineLayout pipeline_layout;
-    Pair<VkImage, VkDeviceMemory> depth_image;
+    std::pair<VkImage, VkDeviceMemory> depth_image;
     VkImageView depth_view;
 
-    u32 current_img = 0, current_frame = 0;
+    unsigned int current_img = 0, current_frame = 0;
     bool needs_resize = false, minimized = false;
 
     Info info;
@@ -121,9 +142,9 @@ private:
     VkRenderPass output_pass;
 
     Current_GPU gpu;
-    Vec<GPU, alloc> gpus;
+    std::vector<GPU> gpus;
 
-    SDL_Window* window = null;
+    SDL_Window* window = nullptr;
 
     void select_gpu();
     void enumerate_gpus();
@@ -160,23 +181,23 @@ private:
     VkCommandBuffer allocate_buf_ots();
     VkCommandBuffer allocate_buf_secondary();
     void run_wait_free_buf(VkCommandBuffer cmds);
-    void submit_frame(Vec<VkCommandBuffer, alloc>&& buffers);
+    void submit_frame(std::vector<VkCommandBuffer>&& buffers);
 
-    VkShaderModule create_shader(const Vec<u8>& data);
+    VkShaderModule create_shader(const std::vector<unsigned char>& data);
     void copy_buffer(VkBuffer src, VkBuffer dst, VkDeviceSize size);
-    Pair<VkBuffer, VkDeviceMemory> create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
+    std::pair<VkBuffer, VkDeviceMemory> create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
 
-    void buffer_to_image(VkBuffer buffer, VkImage image, u32 w, u32 h);
+    void buffer_to_image(VkBuffer buffer, VkImage image, unsigned int w, unsigned int h);
     VkImageView create_image_view(VkImage image, VkFormat format, VkImageAspectFlags aspect);
     void transition_image(VkImage image, VkFormat format, VkImageLayout old_l, VkImageLayout new_l);
-    Pair<VkImage, VkDeviceMemory> create_image(u32 width, u32 height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties);
+    std::pair<VkImage, VkDeviceMemory> create_image(unsigned int width, unsigned int height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties);
 
     VkFormat find_depth_format();
     bool format_has_stencil(VkFormat format);
 
     VkExtent2D choose_surface_extent();
-    u32 choose_memory_type(u32 filter, VkMemoryPropertyFlags properties);
-    VkFormat choose_supported_format(const Vec<VkFormat>& formats, VkImageTiling tiling, VkFormatFeatureFlags features);
+    unsigned int choose_memory_type(unsigned int filter, VkMemoryPropertyFlags properties);
+    VkFormat choose_supported_format(const std::vector<VkFormat>& formats, VkImageTiling tiling, VkFormatFeatureFlags features);
 };
 
 } // namespace VK

@@ -2,10 +2,12 @@
 #pragma once
 
 #include <util/files.h>
-#include <lib/lib.h>
-#include <stb/stb_image.h>
+#include <sf_libs/stb_image.h>
+#include <vector>
+#include <optional>
+#include <string>
 
-template<typename A = Mdefault> struct Image {
+struct Image {
 
     explicit Image() = default;
     ~Image() = default;
@@ -16,35 +18,36 @@ template<typename A = Mdefault> struct Image {
     Image(Image&& src) = default;
     Image& operator=(Image&& src) = default;
 
-    u32 w() const {
+    unsigned int w() const {
         return _w;
     }
-    u32 h() const {
+    unsigned int h() const {
         return _h;
     }
-    u32 bytes() const {
+    unsigned int bytes() const {
         return _w * _h * 4;
     }
-    Pair<u32, u32> dim() const {
+
+    std::pair<unsigned int, unsigned int> dim() const {
         return {_w, _h};
     }
 
-    const u8* data() const {
+    const unsigned char* data() const {
         return _data.data();
     }
 
-    bool reload(literal path) {
+    bool reload(std::string path) {
 
         auto file_data = File::read(path);
-        if(!file_data.ok()) return false;
+        if(!file_data.has_value()) return false;
 
-        i32 x, y;
-        u8* pixels = stbi_load_from_memory(file_data.value().data(), file_data.value().size(), &x,
-                                           &y, null, STBI_rgb_alpha);
+        int x, y;
+        unsigned char* pixels = stbi_load_from_memory(file_data.value().data(), (int)file_data.value().size(), &x,
+                                           &y, nullptr, STBI_rgb_alpha);
         if(!pixels) return false;
 
         _data.clear();
-        _data.extend(x * y * 4);
+        _data.resize(x * y * 4);
         _w = x;
         _h = y;
 
@@ -54,15 +57,15 @@ template<typename A = Mdefault> struct Image {
         return true;
     }
 
-    static Maybe<Image> load(literal path) {
+    static std::optional<Image> load(std::string path) {
         Image ret;
         if(ret.reload(path)) {
-            return Maybe(std::move(ret));
+            return {std::move(ret)};
         }
-        return Maybe<Image>();
+        return std::nullopt;
     }
 
 private:
-    Vec<u8, A> _data;
-    u32 _w = 0, _h = 0;
+    std::vector<unsigned char> _data;
+    unsigned int _w = 0, _h = 0;
 };

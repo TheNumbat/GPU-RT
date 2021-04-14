@@ -1,0 +1,17 @@
+
+SETUP
+    add vkallocator
+    render object meshes 
+    load textures and render textured objects
+
+FCPW 
+    build my own BVH over the objects
+    send it to the GPU 
+    query it on the GPU with compute shaders
+    optimize that BVH 
+
+Rendering 
+    set up RTX BVH and render them with ray tracing lel 
+    add light sampling, indirect lighting 
+    work on ReSTIR
+

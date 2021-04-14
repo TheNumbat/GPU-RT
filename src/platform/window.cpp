@@ -5,8 +5,6 @@
 #include "imgui_impl_sdl.h"
 #include <imgui/imgui.h>
 
-#include <util/profile.h>
-
 #ifdef _WIN32
 #include <ShellScalingApi.h>
 #include <windows.h>
@@ -15,14 +13,6 @@ __declspec(dllexport) bool NvOptimusEnablement = true;
 __declspec(dllexport) bool AmdPowerXpressRequestHighPerformance = true;
 }
 #endif
-
-void* imgui_alloc(usize sz, void*) {
-    return Window::ImGui_Alloc::alloc<u8>(sz);
-}
-
-void imgui_free(void* mem, void*) {
-    Window::ImGui_Alloc::dealloc(mem);
-}
 
 Window::Window() {
     init();
@@ -49,9 +39,8 @@ void Window::init() {
         die("Failed to create window: %s", SDL_GetError());
     }
 
-    keybuf = SDL_GetKeyboardState(null);
+    keybuf = SDL_GetKeyboardState(nullptr);
 
-    ImGui::SetAllocatorFunctions(imgui_alloc, imgui_free, null);
     ImGui::CreateContext();
     ImGui_ImplSDL2_InitForVulkan(window);
 
@@ -62,15 +51,15 @@ void Window::init() {
 
 void Window::set_dpi() {
 
-    f32 dpi;
-    i32 index = SDL_GetWindowDisplayIndex(window);
+    float dpi;
+    int index = SDL_GetWindowDisplayIndex(window);
     if(index < 0) {
         return;
     }
-    if(SDL_GetDisplayDPI(index, null, &dpi, null)) {
+    if(SDL_GetDisplayDPI(index, nullptr, &dpi, nullptr)) {
         return;
     }
-    f32 scale = drawable().x / size().x;
+    float scale = drawable().x / size().x;
     if(prev_dpi == dpi && prev_scale == scale) return;
 
     ImGuiStyle style;
@@ -111,7 +100,7 @@ void Window::shutdown() {
 
     ImGui::DestroyContext();
     SDL_DestroyWindow(window);
-    window = null;
+    window = nullptr;
     SDL_Quit();
 }
 
@@ -121,7 +110,7 @@ void Window::complete_frame() {
     vulkan.end_frame();
 }
 
-Maybe<SDL_Event> Window::event() {
+std::optional<SDL_Event> Window::event() {
 
     SDL_Event e;
     if(SDL_PollEvent(&e)) {
@@ -138,9 +127,9 @@ Maybe<SDL_Event> Window::event() {
         } break;
         }
 
-        return Maybe<SDL_Event>(std::move(e));
+        return {std::move(e)};
     }
-    return Maybe<SDL_Event>();
+    return std::nullopt;
 }
 
 void Window::begin_frame() {
@@ -158,15 +147,15 @@ Vec2 Window::scale(Vec2 pt) {
 }
 
 Vec2 Window::size() {
-    i32 w, h;
+    int w, h;
     SDL_GetWindowSize(window, &w, &h);
-    return Vec2((f32)w, (f32)h);
+    return Vec2((float)w, (float)h);
 }
 
 Vec2 Window::drawable() {
-    i32 w, h;
+    int w, h;
     SDL_GL_GetDrawableSize(window, &w, &h);
-    return Vec2((f32)w, (f32)h);
+    return Vec2((float)w, (float)h);
 }
 
 void Window::grab_mouse() {
@@ -178,9 +167,9 @@ void Window::ungrab_mouse() {
 }
 
 Vec2 Window::get_mouse() {
-    i32 x, y;
+    int x, y;
     SDL_GetMouseState(&x, &y);
-    return Vec2((f32)x, (f32)y);
+    return Vec2((float)x, (float)y);
 }
 
 void Window::capture_mouse() {
@@ -194,5 +183,5 @@ void Window::release_mouse() {
 }
 
 void Window::set_mouse(Vec2 pos) {
-    SDL_WarpMouseInWindow(window, (i32)pos.x, (i32)pos.y);
+    SDL_WarpMouseInWindow(window, (int)pos.x, (int)pos.y);
 }

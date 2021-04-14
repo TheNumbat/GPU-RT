@@ -16,16 +16,19 @@ set(SOURCES_CLIENT "src/main.cpp"
                    "src/platform/window.cpp"
                    "src/platform/vulkan.h"
                    "src/platform/vulkan.cpp"
-                   "src/gui/dbg.h"
-                   "src/gui/dbg.cpp"
-                   "src/gui/profiler.h"
-                   "src/gui/profiler.cpp"
-                   "src/gui/imgui_ext.h"
                    "src/util/image.h"
                    "src/util/files.h"
                    "src/util/files.cpp"
-                   "src/util/profile.h"
-                   "src/util/profile.cpp"
+                   "src/util/camera.h"
+                   "src/util/camera.cpp"
+                   "src/scene/scene.h"
+                   "src/scene/scene.cpp"
+                   "src/scene/object.h"
+                   "src/scene/object.cpp"
+                   "src/scene/pose.h"
+                   "src/scene/pose.cpp"
+                   "src/scene/material.h"
+                   "src/scene/material.cpp"
                    "src/platform/imgui_impl_sdl.h"
                    "src/platform/imgui_impl_sdl.cpp"
                    "src/platform/imgui_impl_vulkan.h"
@@ -65,7 +68,7 @@ endif()
 set_target_properties(fcpw-gpu PROPERTIES CXX_STANDARD 20 CXX_EXTENSIONS OFF)
 
 if(MSVC)
-    target_compile_options(fcpw-gpu PRIVATE /MP /W4 /WX /wd4201 /wd4840 /wd4100 /fp:fast)
+    target_compile_options(fcpw-gpu PRIVATE /MP /W4 /WX /wd4201 /wd4840 /wd4100 /wd4267 /fp:fast)
 else()
     target_compile_options(fcpw-gpu PRIVATE -Wall -fconcepts -Wextra -Werror -Wno-missing-braces -Wno-reorder -ffast-math -Wno-unused-parameter)
 endif()
@@ -116,7 +119,8 @@ target_include_directories(fcpw-gpu PRIVATE "${CMAKE_BINARY_DIR}/deps/assimp/inc
 # build dependencies
 
 add_subdirectory("deps/imgui/")
-add_subdirectory("deps/stb/")
+add_subdirectory("deps/sf_libs/")
+add_subdirectory("deps/nfd/")
 
 find_package(Vulkan REQUIRED FATAL_ERROR)
 target_include_directories(fcpw-gpu PRIVATE ${VULKAN_INCLUDE_DIRS})
@@ -136,7 +140,8 @@ include_directories(${ASSIMP_INCLUDE_DIRS})
 # link libraries
 
 target_link_libraries(fcpw-gpu PRIVATE imgui)
-target_link_libraries(fcpw-gpu PRIVATE stb)
+target_link_libraries(fcpw-gpu PRIVATE sf_libs)
+target_link_libraries(fcpw-gpu PRIVATE nfd)
 target_link_libraries(fcpw-gpu PRIVATE ${Vulkan_LIBRARY})
 target_link_libraries(fcpw-gpu PRIVATE assimp)
 

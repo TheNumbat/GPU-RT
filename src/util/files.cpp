@@ -4,21 +4,21 @@
 
 namespace File {
 
-Maybe<Vec<u8>> read(literal path) {
+std::optional<std::vector<unsigned char>> read(std::string path) {
 
-    std::ifstream file(path.str(), std::ios::ate | std::ios::binary);
+    std::ifstream file(path.c_str(), std::ios::ate | std::ios::binary);
     if(!file.good()) {
-        return Maybe<Vec<u8>>();
+        return std::nullopt;
     }
 
-    u32 size = (u32)file.tellg();
-    Vec<u8> data(size);
+    unsigned int size = (unsigned int)file.tellg();
+    std::vector<unsigned char> data(size);
 
     file.seekg(0);
     file.read((char*)data.data(), size);
-    data.extend(size);
+    data.resize(size);
 
-    return Maybe(std::move(data));
+    return {std::move(data)};
 }
 
 } // namespace File

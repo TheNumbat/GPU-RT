@@ -12,7 +12,8 @@
 //-----------------------------------------------------------------------------
 
 #pragma once
-#include <lib/lib.h>
+#include <lib/vec2.h>
+#include <lib/vec4.h>
 
 //---- Define assertion handler. Defaults to calling assert().
 

@@ -2,8 +2,9 @@
 #pragma once
 
 #include "vulkan.h"
+#include <optional>
 #include <SDL2/SDL.h>
-#include <lib/lib.h>
+#include <lib/mathlib.h>
 
 class Window {
 public:
@@ -21,15 +22,15 @@ public:
     void grab_mouse();
     void ungrab_mouse();
 
-    Maybe<SDL_Event> event();
+    std::optional<SDL_Event> event();
     bool is_down(SDL_Scancode key);
 
     void begin_frame();
     void complete_frame();
 
 private:
-    f32 prev_dpi = 0.0f;
-    f32 prev_scale = 0.0f;
+    float prev_dpi = 0.0f;
+    float prev_scale = 0.0f;
 
     void init();
     void set_dpi();
@@ -38,9 +39,4 @@ private:
     VK::Manager vulkan;
     SDL_Window* window = nullptr;
     const Uint8* keybuf = nullptr;
-
-    static constexpr char imgui_name[] = "ImGui";
-    using ImGui_Alloc = Mallocator<imgui_name>;
-    friend void* imgui_alloc(usize, void*);
-    friend void imgui_free(void*, void*);
 };

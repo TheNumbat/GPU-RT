@@ -1,8 +1,10 @@
 
 #pragma once
 
-#include <lib/lib.h>
+#include <optional>
+#include <string>
+#include <vector>
 
 namespace File {
-Maybe<Vec<u8>> read(literal path);
+std::optional<std::vector<unsigned char>> read(std::string path);
 }

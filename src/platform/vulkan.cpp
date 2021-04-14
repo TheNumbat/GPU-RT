@@ -1,15 +1,15 @@
 
 #include "vulkan.h"
-#include "../util/image.h"
 #include "imgui_impl_vulkan.h"
 
+#include <lib/log.h>
 #include <SDL2/SDL_vulkan.h>
+#include <util/image.h>
 #include <util/files.h>
-#include <util/profile.h>
 
 namespace VK {
 
-const Vec<Vertex> vertices = {
+const std::vector<Vertex> vertices = {
     {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
     {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
     {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
@@ -21,7 +21,7 @@ const Vec<Vertex> vertices = {
     {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}
 };
 
-const Vec<u16> indices = {
+const std::vector<unsigned short> indices = {
     0, 1, 2, 2, 3, 0,
     4, 5, 6, 6, 7, 4
 };
@@ -34,9 +34,9 @@ VkVertexInputBindingDescription Vertex::bind_desc() {
     return desc;
 }
 
-Array<VkVertexInputAttributeDescription, 3> Vertex::attr_descs() {
+std::array<VkVertexInputAttributeDescription, 3> Vertex::attr_descs() {
 
-    Array<VkVertexInputAttributeDescription, 3> ret;
+    std::array<VkVertexInputAttributeDescription, 3> ret;
 
     ret[0].binding = 0;
     ret[0].location = 0;
@@ -53,7 +53,7 @@ Array<VkVertexInputAttributeDescription, 3> Vertex::attr_descs() {
     ret[2].format = VK_FORMAT_R32G32_SFLOAT;
     ret[2].offset = offsetof(Vertex, tex_coord);
 
-    return Array(ret);
+    return ret;
 }
 
 #define VK_CHECK(f)                                                                                \
@@ -64,7 +64,7 @@ Array<VkVertexInputAttributeDescription, 3> Vertex::attr_descs() {
         }                                                                                          \
     } while(0)
 
-static literal vk_err_str(VkResult errorCode) {
+static std::string vk_err_str(VkResult errorCode) {
     switch(errorCode) {
 #define STR(r)                                                                                     \
     case VK_##r: return #r
@@ -96,7 +96,7 @@ static literal vk_err_str(VkResult errorCode) {
     }
 }
 
-static literal vk_obj_type(VkObjectType type) {
+static std::string vk_obj_type(VkObjectType type) {
     switch(type) {
 #define STR(r)                                                                                     \
     case VK_OBJECT_TYPE_##r: return #r
@@ -173,7 +173,7 @@ void Manager::begin_frame() {
     ImGui_ImplVulkan_NewFrame();
 }
 
-void Manager::submit_frame(Vec<VkCommandBuffer, alloc>&& buffers) {
+void Manager::submit_frame(std::vector<VkCommandBuffer>&& buffers) {
 
     Frame& frame = frames[current_frame];
     Swapchain_Image& image = swapchain.images[current_img];
@@ -234,25 +234,25 @@ void Manager::submit_frame(Vec<VkCommandBuffer, alloc>&& buffers) {
     frame.secondary = std::move(buffers);
 }
 
-Pair<u32,u32> Swapchain::dim() {
+std::pair<unsigned int,unsigned int> Swapchain::dim() {
     return {extent.width, extent.height};
 }
 
-f32 Swapchain::aspect_ratio() {
-    return (f32)extent.width / extent.height;
+float Swapchain::aspect_ratio() {
+    return (float)extent.width / extent.height;
 }
 
 void Manager::update_uniforms() {
 
-    static u32 start = SDL_GetTicks();
+    static unsigned int start = SDL_GetTicks();
 
-    u32 current = SDL_GetTicks();
-    f32 time = (current - start) / 1000.0f;
+    unsigned int current = SDL_GetTicks();
+    float time = (current - start) / 1000.0f;
 
     Uniforms ubo;
     ubo.M = Mat4::rotate(time * 90.0f, {0.0f, 0.0f, 1.0f});
     ubo.V = Mat4::look_at({2.0f, 2.0f, 2.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f});
-    ubo.P = Mat4::proj(90.0f, swapchain.aspect_ratio(), 0.01f);
+    ubo.P = Mat4::project(90.0f, swapchain.aspect_ratio(), 0.01f);
 
     void* data;
     vkMapMemory(gpu.device, uniform_buffers[current_frame].second, 0, sizeof(Uniforms), 0, &data);
@@ -271,9 +271,9 @@ void Manager::end_frame() {
         return;
     }
 
-    Vec<VkCommandBuffer, alloc> buffers;
-    buffers.push(render_square());
-    buffers.push(render_imgui());
+    std::vector<VkCommandBuffer> buffers;
+    buffers.push_back(render_square());
+    buffers.push_back(render_imgui());
     submit_frame(std::move(buffers));
 
     Frame& frame = frames[current_frame];
@@ -289,7 +289,7 @@ void Manager::end_frame() {
     present_info.swapchainCount = 1;
     present_info.pSwapchains = swapchains;
     present_info.pImageIndices = &current_img;
-    present_info.pResults = null; // Optional
+    present_info.pResults = nullptr; // Optional
 
     VkResult result = vkQueuePresentKHR(gpu.present_queue, &present_info);
     if(result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || needs_resize) {
@@ -310,7 +310,7 @@ VkCommandBuffer Manager::render_imgui() {
 
 VkCommandBuffer Manager::allocate_buf_secondary() {
 
-    u32 i = current_img;
+    unsigned int i = current_img;
     VkCommandBufferAllocateInfo alloc_info = {};
     alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     alloc_info.level = VK_COMMAND_BUFFER_LEVEL_SECONDARY;
@@ -346,7 +346,7 @@ VkCommandBuffer Manager::render_square() {
     vkCmdBindVertexBuffers(cmds, 0, 1, vertex_buffers, offsets);
     vkCmdBindIndexBuffer(cmds, index_buffer.first, 0, VK_INDEX_TYPE_UINT16);
     vkCmdBindDescriptorSets(cmds, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1,
-                            &descriptor_sets[current_frame], 0, null);
+                            &descriptor_sets[current_frame], 0, nullptr);
     vkCmdDrawIndexed(cmds, indices.size(), 1, 0, 0, 0);
 
     return cmds;
@@ -359,7 +359,7 @@ VkExtent2D Manager::choose_surface_extent() {
 
     VkExtent2D ext;
     if((int)gpu.data->surf_caps.currentExtent.width == -1) {
-        i32 w, h;
+        int w, h;
         SDL_GetWindowSize(window, &w, &h);
         ext.width = w;
         ext.height = h;
@@ -495,24 +495,24 @@ void Manager::destroy_swapchain() {
 
     // Rendering quad
     {
-        vkDestroyPipeline(gpu.device, graphics_pipeline, null);
-        vkDestroyPipelineLayout(gpu.device, pipeline_layout, null);
+        vkDestroyPipeline(gpu.device, graphics_pipeline, nullptr);
+        vkDestroyPipelineLayout(gpu.device, pipeline_layout, nullptr);
         pipeline_layout = {};
         graphics_pipeline = {};
     }
 
-    vkDestroyImageView(gpu.device, depth_view, null);
-    vkDestroyImage(gpu.device, depth_image.first, null);
-    vkFreeMemory(gpu.device, depth_image.second, null);
+    vkDestroyImageView(gpu.device, depth_view, nullptr);
+    vkDestroyImage(gpu.device, depth_image.first, nullptr);
+    vkFreeMemory(gpu.device, depth_image.second, nullptr);
 
-    vkDestroyRenderPass(gpu.device, output_pass, null);
+    vkDestroyRenderPass(gpu.device, output_pass, nullptr);
     output_pass = {};
 
     for(Swapchain_Image& image : swapchain.images) {
-        vkDestroyImageView(gpu.device, image.view, null);
-        vkDestroyFramebuffer(gpu.device, image.framebuffer, null);
+        vkDestroyImageView(gpu.device, image.view, nullptr);
+        vkDestroyFramebuffer(gpu.device, image.framebuffer, nullptr);
     }
-    vkDestroySwapchainKHR(gpu.device, swapchain.swapchain, null);
+    vkDestroySwapchainKHR(gpu.device, swapchain.swapchain, nullptr);
     swapchain.images.clear();
 }
 
@@ -525,47 +525,47 @@ void Manager::destroy() {
 
     // Rendering quad
     {
-        vkDestroySampler(gpu.device, texture_sampler, null);
-        vkDestroyImageView(gpu.device, texture_view, null);
-        vkDestroyImage(gpu.device, texture.first, null);
-        vkFreeMemory(gpu.device, texture.second, null);
+        vkDestroySampler(gpu.device, texture_sampler, nullptr);
+        vkDestroyImageView(gpu.device, texture_view, nullptr);
+        vkDestroyImage(gpu.device, texture.first, nullptr);
+        vkFreeMemory(gpu.device, texture.second, nullptr);
 
         vkFreeDescriptorSets(gpu.device, descriptor_pool, descriptor_sets.size(),
                              descriptor_sets.data());
         descriptor_sets.clear();
 
         for(auto& buf : uniform_buffers) {
-            vkFreeMemory(gpu.device, buf.second, null);
-            vkDestroyBuffer(gpu.device, buf.first, null);
+            vkFreeMemory(gpu.device, buf.second, nullptr);
+            vkDestroyBuffer(gpu.device, buf.first, nullptr);
         }
         uniform_buffers.clear();
 
-        vkDestroyDescriptorSetLayout(gpu.device, descriptor_layout, null);
+        vkDestroyDescriptorSetLayout(gpu.device, descriptor_layout, nullptr);
 
-        vkDestroyBuffer(gpu.device, index_buffer.first, null);
-        vkFreeMemory(gpu.device, index_buffer.second, null);
-        vkDestroyBuffer(gpu.device, vertex_buffer.first, null);
-        vkFreeMemory(gpu.device, vertex_buffer.second, null);
+        vkDestroyBuffer(gpu.device, index_buffer.first, nullptr);
+        vkFreeMemory(gpu.device, index_buffer.second, nullptr);
+        vkDestroyBuffer(gpu.device, vertex_buffer.first, nullptr);
+        vkFreeMemory(gpu.device, vertex_buffer.second, nullptr);
     }
 
     for(Frame& frame : frames) {
-        vkDestroyFence(gpu.device, frame.fence, null);
-        vkDestroySemaphore(gpu.device, frame.avail, null);
-        vkDestroySemaphore(gpu.device, frame.finish, null);
+        vkDestroyFence(gpu.device, frame.fence, nullptr);
+        vkDestroySemaphore(gpu.device, frame.avail, nullptr);
+        vkDestroySemaphore(gpu.device, frame.finish, nullptr);
         vkFreeCommandBuffers(gpu.device, command_pool, frame.secondary.size(),
                              frame.secondary.data());
         vkFreeCommandBuffers(gpu.device, command_pool, 1, &frame.primary);
     }
     frames.clear();
 
-    vkDestroyCommandPool(gpu.device, command_pool, null);
-    vkDestroyDescriptorPool(gpu.device, descriptor_pool, null);
+    vkDestroyCommandPool(gpu.device, command_pool, nullptr);
+    vkDestroyDescriptorPool(gpu.device, descriptor_pool, nullptr);
 
-    vkDestroyDevice(gpu.device, null);
-    vkDestroySurfaceKHR(info.instance, swapchain.surface, null);
+    vkDestroyDevice(gpu.device, nullptr);
+    vkDestroySurfaceKHR(info.instance, swapchain.surface, nullptr);
     destroy_debug_callback();
 
-    vkDestroyInstance(info.instance, null);
+    vkDestroyInstance(info.instance, nullptr);
 
     gpu = {};
     command_pool = {};
@@ -585,7 +585,7 @@ static VkBool32 debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT sev,
     if (data->messageIdNumber == 0x7cd0911d)
         return false;
 
-    literal message(data->pMessage);
+    std::string message(data->pMessage);
 
     // Ignore these
     if(message.starts_with("Device Extension") || message.starts_with("Unloading layer library") || message.starts_with("Loading layer library")) {
@@ -593,18 +593,18 @@ static VkBool32 debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT sev,
     }
 
     if(sev == VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT || sev == VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) 
-        info("[VK] % (%)", message, data->messageIdNumber);
+        info("[VK] %s (%d)", message.c_str(), data->messageIdNumber);
     else
-        warn("[VK] %", message);
+        warn("[VK] %s", message.c_str());
 
-    for (u32 i = 0; i < data->queueLabelCount; i++)
-        info("\tduring %", literal(data->pQueueLabels[i].pLabelName));
-    for (u32 i = 0; i < data->cmdBufLabelCount; i++)
-        info("\tinside %", literal(data->pCmdBufLabels[i].pLabelName));
+    for (unsigned int i = 0; i < data->queueLabelCount; i++)
+        info("\tduring %s", data->pQueueLabels[i].pLabelName);
+    for (unsigned int i = 0; i < data->cmdBufLabelCount; i++)
+        info("\tinside %s", data->pCmdBufLabels[i].pLabelName);
     
-    for (u32 i = 0; i < data->objectCount; i++) {
+    for (unsigned int i = 0; i < data->objectCount; i++) {
         const VkDebugUtilsObjectNameInfoEXT *obj = &data->pObjects[i];
-        info("\tusing %: % (%)", vk_obj_type(obj->objectType), literal(obj->pObjectName ? obj->pObjectName : "?"), obj->objectHandle);
+        info("\tusing %s: %s (%zu)", vk_obj_type(obj->objectType).c_str(), obj->pObjectName ? obj->pObjectName : "?", obj->objectHandle);
     }
     
     if(sev == VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
@@ -633,7 +633,7 @@ void Manager::init_debug_callback() {
     PFN_vkCreateDebugUtilsMessengerEXT func =
         (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(info.instance, "vkCreateDebugUtilsMessengerEXT");
     if(!func) die("Could not find vkCreateDebugUtilsMessengerEXT");
-    VK_CHECK(func(info.instance, &callback, null, &info.debug_callback_info));
+    VK_CHECK(func(info.instance, &callback, nullptr, &info.debug_callback_info));
 }
 
 void Manager::destroy_debug_callback() {
@@ -641,16 +641,16 @@ void Manager::destroy_debug_callback() {
     PFN_vkDestroyDebugUtilsMessengerEXT func =
         (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(info.instance, "vkDestroyDebugUtilsMessengerEXT");
     if(!func) die("Could not find vkDestroyDebugUtilsMessengerEXT");
-    func(info.instance, info.debug_callback_info, null);
+    func(info.instance, info.debug_callback_info, nullptr);
 }
 
 void Manager::create_instance() {
 
     VkApplicationInfo app_info = {};
     app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    app_info.pApplicationName = "Exile";
+    app_info.pApplicationName = "GPURT";
     app_info.applicationVersion = VK_MAKE_VERSION(0, 0, 2);
-    app_info.pEngineName = "Exile";
+    app_info.pEngineName = "GPURT";
     app_info.engineVersion = VK_MAKE_VERSION(0, 0, 2);
     app_info.apiVersion = VK_API_VERSION_1_1;
 
@@ -662,14 +662,23 @@ void Manager::create_instance() {
     info.dev_ext.clear();
     info.layers.clear();
 
-    info.inst_ext.push(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-    info.dev_ext.push(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+    info.inst_ext.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    info.dev_ext.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
-    u32 sdl_count = 0;
-    if(!SDL_Vulkan_GetInstanceExtensions(window, &sdl_count, null)) {
+    info.dev_ext.push_back("VK_KHR_shader_float_controls");
+    info.dev_ext.push_back("VK_KHR_spirv_1_4");
+    info.dev_ext.push_back("VK_EXT_descriptor_indexing");
+    info.dev_ext.push_back("VK_KHR_buffer_device_address");
+    info.dev_ext.push_back("VK_KHR_deferred_host_operations");
+    info.dev_ext.push_back("VK_KHR_acceleration_structure");
+    info.dev_ext.push_back("VK_KHR_ray_tracing_pipeline");
+    info.dev_ext.push_back("VK_KHR_ray_query");
+
+    unsigned int sdl_count = 0;
+    if(!SDL_Vulkan_GetInstanceExtensions(window, &sdl_count, nullptr)) {
         die("Failed to get required SDL vk instance extensions: %", SDL_GetError());
     }
-    info.inst_ext.extend(sdl_count);
+    info.inst_ext.insert(info.inst_ext.end(), sdl_count, nullptr);
     if(!SDL_Vulkan_GetInstanceExtensions(window, &sdl_count, info.inst_ext.data() + info.inst_ext.size() - sdl_count)) {
         die("Failed to get required SDL vk instance extensions: %", SDL_GetError());
     }
@@ -677,17 +686,17 @@ void Manager::create_instance() {
     create_info.enabledExtensionCount = info.inst_ext.size();
     create_info.ppEnabledExtensionNames = info.inst_ext.data();
 
-    info.layers.push("VK_LAYER_KHRONOS_validation");
+    info.layers.push_back("VK_LAYER_KHRONOS_validation");
     create_info.enabledLayerCount = info.layers.size();
     create_info.ppEnabledLayerNames = info.layers.data();
 
-    VkResult inst = vkCreateInstance(&create_info, null, &info.instance);
+    VkResult inst = vkCreateInstance(&create_info, nullptr, &info.instance);
     if(inst != VK_SUCCESS) {
         if(inst == VK_ERROR_LAYER_NOT_PRESENT) {
             info.layers.clear();
             create_info.enabledLayerCount = 0;
-            create_info.ppEnabledLayerNames = null;
-            VK_CHECK(vkCreateInstance(&create_info, null, &info.instance));
+            create_info.ppEnabledLayerNames = nullptr;
+            VK_CHECK(vkCreateInstance(&create_info, nullptr, &info.instance));
         } else {
             die("Failed to create VkInstance: %", vk_err_str(inst));
         }
@@ -697,66 +706,66 @@ void Manager::create_instance() {
         die("Failed to create SDL VkSurface: %", SDL_GetError());
     }
 
-    u32 total_extensions = 0;
-    VK_CHECK(vkEnumerateInstanceExtensionProperties(null, &total_extensions, null));
+    unsigned int total_extensions = 0;
+    VK_CHECK(vkEnumerateInstanceExtensionProperties(nullptr, &total_extensions, nullptr));
     info.extensions.clear();
-    info.extensions.extend(total_extensions);
-    VK_CHECK(vkEnumerateInstanceExtensionProperties(null, &total_extensions, info.extensions.data()));
+    info.extensions.resize(total_extensions);
+    VK_CHECK(vkEnumerateInstanceExtensionProperties(nullptr, &total_extensions, info.extensions.data()));
 }
 
 void Manager::enumerate_gpus() {
 
-    u32 devices = 0;
-    VK_CHECK(vkEnumeratePhysicalDevices(info.instance, &devices, null));
+    unsigned int devices = 0;
+    VK_CHECK(vkEnumeratePhysicalDevices(info.instance, &devices, nullptr));
     if(!devices) {
         die("Found no GPUs.");
     }
 
-    Vec<VkPhysicalDevice, alloc> phys_list;
-    phys_list.extend(devices);
+    std::vector<VkPhysicalDevice> phys_list;
+    phys_list.resize(devices);
     VK_CHECK(vkEnumeratePhysicalDevices(info.instance, &devices, phys_list.data()));
 
     gpus.clear();
-    gpus.extend(devices);
-    for(u32 i = 0; i < devices; i++) {
+    gpus.resize(devices);
+    for(unsigned int i = 0; i < devices; i++) {
         GPU& g = gpus[i];
         g.device = phys_list[i];
 
         {
-            u32 num_queues = 0;
-            vkGetPhysicalDeviceQueueFamilyProperties(g.device, &num_queues, null);
+            unsigned int num_queues = 0;
+            vkGetPhysicalDeviceQueueFamilyProperties(g.device, &num_queues, nullptr);
             if(num_queues <= 0) warn("Found no device queues.");
-            g.queue_families.extend(num_queues);
+            g.queue_families.resize(num_queues);
             vkGetPhysicalDeviceQueueFamilyProperties(g.device, &num_queues,
                                                      g.queue_families.data());
         }
         {
-            u32 num_exts = 0;
-            VK_CHECK(vkEnumerateDeviceExtensionProperties(g.device, null, &num_exts, null));
+            unsigned int num_exts = 0;
+            VK_CHECK(vkEnumerateDeviceExtensionProperties(g.device, nullptr, &num_exts, nullptr));
             if(!num_exts) warn("Found no device extensions.");
-            g.exts.extend(num_exts);
+            g.exts.resize(num_exts);
             VK_CHECK(
-                vkEnumerateDeviceExtensionProperties(g.device, null, &num_exts, g.exts.data()));
+                vkEnumerateDeviceExtensionProperties(g.device, nullptr, &num_exts, g.exts.data()));
         }
         {
             VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(g.device, swapchain.surface,
                                                                &g.surf_caps));
         }
         {
-            u32 num_fmts = 0;
+            unsigned int num_fmts = 0;
             VK_CHECK(
-                vkGetPhysicalDeviceSurfaceFormatsKHR(g.device, swapchain.surface, &num_fmts, null));
+                vkGetPhysicalDeviceSurfaceFormatsKHR(g.device, swapchain.surface, &num_fmts, nullptr));
             if(!num_fmts) warn("Found no device surface formats.");
-            g.fmts.extend(num_fmts);
+            g.fmts.resize(num_fmts);
             VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(g.device, swapchain.surface, &num_fmts,
                                                           g.fmts.data()));
         }
         {
-            u32 num_modes = 0;
+            unsigned int num_modes = 0;
             VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(g.device, swapchain.surface,
-                                                               &num_modes, null));
+                                                               &num_modes, nullptr));
             if(!num_modes) warn("Found no device present modes.");
-            g.modes.extend(num_modes);
+            g.modes.resize(num_modes);
             VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(g.device, swapchain.surface,
                                                                &num_modes, g.modes.data()));
         }
@@ -768,9 +777,9 @@ void Manager::enumerate_gpus() {
     }
 }
 
-bool GPU::supports(const Vec<const char*, alloc>& extensions) {
+bool GPU::supports(const std::vector<const char*>& extensions) {
 
-    usize matched = 0;
+    size_t matched = 0;
 
     for(auto e : extensions) {
         for(auto& p : exts) {
@@ -788,7 +797,7 @@ void Manager::select_gpu() {
 
     for(GPU& g : gpus) {
 
-        literal name = g.dev_prop.deviceName;
+        std::string name = g.dev_prop.deviceName;
         g.graphics_idx = -1;
         g.present_idx = -1;
 
@@ -811,7 +820,7 @@ void Manager::select_gpu() {
             continue;
         }
 
-        for(u32 i = 0; i < g.queue_families.size(); i++) {
+        for(unsigned int i = 0; i < g.queue_families.size(); i++) {
             auto& family = g.queue_families[i];
             if(!family.queueCount) continue;
             if(family.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
@@ -820,7 +829,7 @@ void Manager::select_gpu() {
             }
         }
 
-        for(u32 i = 0; i < g.queue_families.size(); i++) {
+        for(unsigned int i = 0; i < g.queue_families.size(); i++) {
             auto& family = g.queue_families[i];
             if(!family.queueCount) continue;
 
@@ -835,12 +844,12 @@ void Manager::select_gpu() {
 
         if(g.graphics_idx >= 0 && g.present_idx >= 0) {
             // TODO(max): choose best GPU out of all compatible GPUs (e.g. discrete GPU)
-            info("Selecting GPU: %", name);
+            info("Selecting GPU: %s", name.c_str());
             gpu.data = &g;
             return;
         }
 
-        info("Device % does not have a suitable graphics and present queue.", name);
+        info("Device %s does not have a suitable graphics and present queue.", name.c_str());
     }
 
     die("Failed to find compatible Vulkan device.");
@@ -848,8 +857,8 @@ void Manager::select_gpu() {
 
 void Manager::create_logical_device_and_queues() {
 
-    const f32 priority = 1.0f;
-    Vec<VkDeviceQueueCreateInfo, alloc> q_info;
+    const float priority = 1.0f;
+    std::vector<VkDeviceQueueCreateInfo> q_info;
 
     {
         VkDeviceQueueCreateInfo qinfo = {};
@@ -857,7 +866,7 @@ void Manager::create_logical_device_and_queues() {
         qinfo.queueFamilyIndex = gpu.data->graphics_idx;
         qinfo.queueCount = 1;
         qinfo.pQueuePriorities = &priority;
-        q_info.push(qinfo);
+        q_info.push_back(qinfo);
     }
     if(gpu.data->present_idx != gpu.data->graphics_idx) {
         VkDeviceQueueCreateInfo qinfo = {};
@@ -865,7 +874,7 @@ void Manager::create_logical_device_and_queues() {
         qinfo.queueFamilyIndex = gpu.data->present_idx;
         qinfo.queueCount = 1;
         qinfo.pQueuePriorities = &priority;
-        q_info.push(qinfo);
+        q_info.push_back(qinfo);
     }
 
     // TODO(max): figure out what device features we need to enable
@@ -882,7 +891,7 @@ void Manager::create_logical_device_and_queues() {
     dev_info.enabledLayerCount = info.layers.size();
     dev_info.ppEnabledLayerNames = info.layers.data();
 
-    VK_CHECK(vkCreateDevice(gpu.data->device, &dev_info, null, &gpu.device));
+    VK_CHECK(vkCreateDevice(gpu.data->device, &dev_info, nullptr, &gpu.device));
 
     vkGetDeviceQueue(gpu.device, gpu.data->graphics_idx, 0, &gpu.graphics_queue);
     vkGetDeviceQueue(gpu.device, gpu.data->present_idx, 0, &gpu.present_queue);
@@ -897,11 +906,11 @@ void Manager::create_frames() {
     finfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     finfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-    frames.extend(Frame::MAX_IN_FLIGHT);
+    frames.resize(Frame::MAX_IN_FLIGHT);
     for(Frame& frame : frames) {
-        VK_CHECK(vkCreateSemaphore(gpu.device, &sinfo, null, &frame.avail));
-        VK_CHECK(vkCreateSemaphore(gpu.device, &sinfo, null, &frame.finish));
-        VK_CHECK(vkCreateFence(gpu.device, &finfo, null, &frame.fence));
+        VK_CHECK(vkCreateSemaphore(gpu.device, &sinfo, nullptr, &frame.avail));
+        VK_CHECK(vkCreateSemaphore(gpu.device, &sinfo, nullptr, &frame.finish));
+        VK_CHECK(vkCreateFence(gpu.device, &finfo, nullptr, &frame.fence));
 
         { // Create command buffer
             VkCommandBufferAllocateInfo alloc_info = {};
@@ -921,10 +930,10 @@ void Manager::create_command_pool() {
     create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     create_info.queueFamilyIndex = gpu.data->graphics_idx;
 
-    VK_CHECK(vkCreateCommandPool(gpu.device, &create_info, null, &command_pool));
+    VK_CHECK(vkCreateCommandPool(gpu.device, &create_info, nullptr, &command_pool));
 }
 
-static VkSurfaceFormatKHR choose_format(const Vec<VkSurfaceFormatKHR, alloc>& formats) {
+static VkSurfaceFormatKHR choose_format(const std::vector<VkSurfaceFormatKHR>& formats) {
 
     VkSurfaceFormatKHR result;
 
@@ -934,7 +943,7 @@ static VkSurfaceFormatKHR choose_format(const Vec<VkSurfaceFormatKHR, alloc>& fo
         warn("Undefined surface format give, using default.");
         return result;
     }
-    for(u32 i = 0; i < formats.size(); i++) {
+    for(unsigned int i = 0; i < formats.size(); i++) {
         const VkSurfaceFormatKHR& fmt = formats[i];
         if(fmt.format == VK_FORMAT_B8G8R8A8_UNORM &&
            fmt.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
@@ -946,11 +955,11 @@ static VkSurfaceFormatKHR choose_format(const Vec<VkSurfaceFormatKHR, alloc>& fo
     return formats[0];
 }
 
-static VkPresentModeKHR choose_present_mode(const Vec<VkPresentModeKHR, alloc>& modes) {
+static VkPresentModeKHR choose_present_mode(const std::vector<VkPresentModeKHR>& modes) {
 
     const VkPresentModeKHR desiredMode = VK_PRESENT_MODE_MAILBOX_KHR;
 
-    for(u32 i = 0; i < modes.size(); i++) {
+    for(unsigned int i = 0; i < modes.size(); i++) {
         if(modes[i] == desiredMode) {
             return desiredMode;
         }
@@ -974,7 +983,7 @@ void Manager::create_framebuffers() {
         fb_info.height = swapchain.extent.height;
         fb_info.layers = 1;
 
-        VK_CHECK(vkCreateFramebuffer(gpu.device, &fb_info, null, &image.framebuffer));
+        VK_CHECK(vkCreateFramebuffer(gpu.device, &fb_info, nullptr, &image.framebuffer));
     }
 }
 
@@ -995,7 +1004,7 @@ void Manager::create_swapchain() {
     sw_info.imageArrayLayers = 1;
     sw_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
-    u32 queue_indices[] = {(u32)gpu.data->graphics_idx, (u32)gpu.data->present_idx};
+    unsigned int queue_indices[] = {(unsigned int)gpu.data->graphics_idx, (unsigned int)gpu.data->present_idx};
 
     if(gpu.data->graphics_idx != gpu.data->present_idx) {
 
@@ -1013,24 +1022,24 @@ void Manager::create_swapchain() {
     sw_info.presentMode = swapchain.present_mode;
     sw_info.clipped = VK_TRUE;
 
-    VK_CHECK(vkCreateSwapchainKHR(gpu.device, &sw_info, null, &swapchain.swapchain));
+    VK_CHECK(vkCreateSwapchainKHR(gpu.device, &sw_info, nullptr, &swapchain.swapchain));
 
-    u32 images = 0;
-    VK_CHECK(vkGetSwapchainImagesKHR(gpu.device, swapchain.swapchain, &images, null));
+    unsigned int images = 0;
+    VK_CHECK(vkGetSwapchainImagesKHR(gpu.device, swapchain.swapchain, &images, nullptr));
     if(!images) {
         die("Failed to get any images from vk swapchain!");
     }
 
-    swapchain.images.extend(images);
+    swapchain.images.resize(images);
 
-    Vec<VkImage, alloc> image_data(images, VkImage());
+    std::vector<VkImage> image_data(images, VkImage());
 
     VK_CHECK(vkGetSwapchainImagesKHR(gpu.device, swapchain.swapchain, &images, image_data.data()));
     if(!images) {
         die("Failed to get any images from vk swapchain!");
     }
 
-    for(u32 i = 0; i < images; i++) {
+    for(unsigned int i = 0; i < images; i++) {
 
         Swapchain_Image& image = swapchain.images[i];
         image.image = image_data[i];
@@ -1038,7 +1047,7 @@ void Manager::create_swapchain() {
     }
 }
 
-VkShaderModule Manager::create_shader(const Vec<u8>& data) {
+VkShaderModule Manager::create_shader(const std::vector<unsigned char>& data) {
 
     VkShaderModuleCreateInfo mod_info = {};
     mod_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -1046,14 +1055,14 @@ VkShaderModule Manager::create_shader(const Vec<u8>& data) {
     mod_info.pCode = (const uint32_t*)data.data();
 
     VkShaderModule mod = {};
-    VK_CHECK(vkCreateShaderModule(gpu.device, &mod_info, null, &mod));
+    VK_CHECK(vkCreateShaderModule(gpu.device, &mod_info, nullptr, &mod));
     return mod;
 }
 
 void Manager::create_pipeline() {
 
-    Vec<u8> vert_code = File::read("shaders/1.vert.spv").move();
-    Vec<u8> frag_code = File::read("shaders/1.frag.spv").move();
+    std::vector<unsigned char> vert_code = File::read("shaders/1.vert.spv").value();
+    std::vector<unsigned char> frag_code = File::read("shaders/1.frag.spv").value();
 
     VkShaderModule v_mod = create_shader(vert_code);
     VkShaderModule f_mod = create_shader(frag_code);
@@ -1088,8 +1097,8 @@ void Manager::create_pipeline() {
     VkViewport viewport = {};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = (f32)swapchain.extent.width;
-    viewport.height = (f32)swapchain.extent.height;
+    viewport.width = (float)swapchain.extent.width;
+    viewport.height = (float)swapchain.extent.height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
 
@@ -1122,7 +1131,7 @@ void Manager::create_pipeline() {
     msaa_info.sampleShadingEnable = VK_FALSE;
     msaa_info.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
     msaa_info.minSampleShading = 1.0f;          // Optional
-    msaa_info.pSampleMask = null;               // Optional
+    msaa_info.pSampleMask = nullptr;               // Optional
     msaa_info.alphaToCoverageEnable = VK_FALSE; // Optional
     msaa_info.alphaToOneEnable = VK_FALSE;      // Optional
 
@@ -1163,9 +1172,9 @@ void Manager::create_pipeline() {
     layout_info.setLayoutCount = 1;
     layout_info.pSetLayouts = &descriptor_layout;
     layout_info.pushConstantRangeCount = 0;
-    layout_info.pPushConstantRanges = null;
+    layout_info.pPushConstantRanges = nullptr;
 
-    VK_CHECK(vkCreatePipelineLayout(gpu.device, &layout_info, null, &pipeline_layout));
+    VK_CHECK(vkCreatePipelineLayout(gpu.device, &layout_info, nullptr, &pipeline_layout));
 
     VkPipelineDepthStencilStateCreateInfo depth_info = {};
     depth_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -1190,21 +1199,21 @@ void Manager::create_pipeline() {
     pipeline_info.pMultisampleState = &msaa_info;
     pipeline_info.pDepthStencilState = &depth_info;
     pipeline_info.pColorBlendState = &blend_info;
-    pipeline_info.pDynamicState = null;
+    pipeline_info.pDynamicState = nullptr;
     pipeline_info.layout = pipeline_layout;
     pipeline_info.renderPass = output_pass;
     pipeline_info.subpass = 0;
     pipeline_info.basePipelineHandle = VK_NULL_HANDLE; // Optional
     pipeline_info.basePipelineIndex = -1;              // Optional
 
-    VK_CHECK(vkCreateGraphicsPipelines(gpu.device, VK_NULL_HANDLE, 1, &pipeline_info, null,
+    VK_CHECK(vkCreateGraphicsPipelines(gpu.device, VK_NULL_HANDLE, 1, &pipeline_info, nullptr,
                                        &graphics_pipeline));
 
-    vkDestroyShaderModule(gpu.device, v_mod, null);
-    vkDestroyShaderModule(gpu.device, f_mod, null);
+    vkDestroyShaderModule(gpu.device, v_mod, nullptr);
+    vkDestroyShaderModule(gpu.device, f_mod, nullptr);
 }
 
-VkFormat Manager::choose_supported_format(const Vec<VkFormat>& formats, VkImageTiling tiling, VkFormatFeatureFlags features) {
+VkFormat Manager::choose_supported_format(const std::vector<VkFormat>& formats, VkImageTiling tiling, VkFormatFeatureFlags features) {
 
     for(VkFormat format : formats) {
 
@@ -1278,10 +1287,10 @@ void Manager::create_output_pass() {
     pass_info.dependencyCount = 1;
     pass_info.pDependencies = &dependency;
 
-    VK_CHECK(vkCreateRenderPass(gpu.device, &pass_info, null, &output_pass));
+    VK_CHECK(vkCreateRenderPass(gpu.device, &pass_info, nullptr, &output_pass));
 }
 
-Pair<VkBuffer, VkDeviceMemory> Manager::create_buffer(VkDeviceSize size, VkBufferUsageFlags usage,
+std::pair<VkBuffer, VkDeviceMemory> Manager::create_buffer(VkDeviceSize size, VkBufferUsageFlags usage,
                                                       VkMemoryPropertyFlags properties) {
 
     VkBuffer out_buf;
@@ -1293,7 +1302,7 @@ Pair<VkBuffer, VkDeviceMemory> Manager::create_buffer(VkDeviceSize size, VkBuffe
     buf_info.usage = usage;
     buf_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    VK_CHECK(vkCreateBuffer(gpu.device, &buf_info, null, &out_buf));
+    VK_CHECK(vkCreateBuffer(gpu.device, &buf_info, nullptr, &out_buf));
 
     VkMemoryRequirements mem_reqs;
     vkGetBufferMemoryRequirements(gpu.device, out_buf, &mem_reqs);
@@ -1303,7 +1312,7 @@ Pair<VkBuffer, VkDeviceMemory> Manager::create_buffer(VkDeviceSize size, VkBuffe
     alloc_info.allocationSize = mem_reqs.size;
     alloc_info.memoryTypeIndex = choose_memory_type(mem_reqs.memoryTypeBits, properties);
 
-    VK_CHECK(vkAllocateMemory(gpu.device, &alloc_info, null, &out_mem));
+    VK_CHECK(vkAllocateMemory(gpu.device, &alloc_info, nullptr, &out_mem));
 
     vkBindBufferMemory(gpu.device, out_buf, out_mem, 0);
 
@@ -1330,8 +1339,8 @@ void Manager::create_data_buffers() {
 
         copy_buffer(staging.first, vertex_buffer.first, buf_size);
 
-        vkDestroyBuffer(gpu.device, staging.first, null);
-        vkFreeMemory(gpu.device, staging.second, null);
+        vkDestroyBuffer(gpu.device, staging.first, nullptr);
+        vkFreeMemory(gpu.device, staging.second, nullptr);
     }
     {
         VkDeviceSize buf_size = sizeof(indices[0]) * indices.size();
@@ -1351,8 +1360,8 @@ void Manager::create_data_buffers() {
 
         copy_buffer(staging.first, index_buffer.first, buf_size);
 
-        vkDestroyBuffer(gpu.device, staging.first, null);
-        vkFreeMemory(gpu.device, staging.second, null);
+        vkDestroyBuffer(gpu.device, staging.first, nullptr);
+        vkFreeMemory(gpu.device, staging.second, nullptr);
     }
 }
 
@@ -1360,9 +1369,9 @@ void Manager::create_uniform_buffers() {
 
     VkDeviceSize buf_size = sizeof(Uniforms);
 
-    uniform_buffers.extend(Frame::MAX_IN_FLIGHT);
+    uniform_buffers.resize(Frame::MAX_IN_FLIGHT);
 
-    for(u32 i = 0; i < Frame::MAX_IN_FLIGHT; i++) {
+    for(unsigned int i = 0; i < Frame::MAX_IN_FLIGHT; i++) {
         uniform_buffers[i] = create_buffer(buf_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                                            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                                                VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -1382,12 +1391,12 @@ void Manager::copy_buffer(VkBuffer src, VkBuffer dst, VkDeviceSize size) {
     run_wait_free_buf(copy_buf);
 }
 
-u32 Manager::choose_memory_type(u32 filter, VkMemoryPropertyFlags properties) {
+unsigned int Manager::choose_memory_type(unsigned int filter, VkMemoryPropertyFlags properties) {
 
     VkPhysicalDeviceMemoryProperties mem_props;
     vkGetPhysicalDeviceMemoryProperties(gpu.data->device, &mem_props);
 
-    for(u32 i = 0; i < mem_props.memoryTypeCount; i++) {
+    for(unsigned int i = 0; i < mem_props.memoryTypeCount; i++) {
         bool type_bit = filter & (i << i);
         bool prop_bits = (mem_props.memoryTypes[i].propertyFlags & properties) == properties;
         if(type_bit && prop_bits) {
@@ -1405,13 +1414,13 @@ void Manager::create_descriptor_set_layout() {
     ubo_bind.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     ubo_bind.descriptorCount = 1;
     ubo_bind.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    ubo_bind.pImmutableSamplers = null;
+    ubo_bind.pImmutableSamplers = nullptr;
 
     VkDescriptorSetLayoutBinding sampler_bind = {};
     sampler_bind.binding = 1;
     sampler_bind.descriptorCount = 1;
     sampler_bind.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    sampler_bind.pImmutableSamplers = null;
+    sampler_bind.pImmutableSamplers = nullptr;
     sampler_bind.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
     VkDescriptorSetLayoutBinding bindings[] = {ubo_bind, sampler_bind};
@@ -1421,37 +1430,37 @@ void Manager::create_descriptor_set_layout() {
     layout_info.bindingCount = 2;
     layout_info.pBindings = bindings;
 
-    VK_CHECK(vkCreateDescriptorSetLayout(gpu.device, &layout_info, null, &descriptor_layout));
+    VK_CHECK(vkCreateDescriptorSetLayout(gpu.device, &layout_info, nullptr, &descriptor_layout));
 }
 
 void Manager::create_descriptor_pool() {
 
-    Array<VkDescriptorPoolSize, 11> pool_sizes = {{VK_DESCRIPTOR_TYPE_SAMPLER, 1024},
-                                                  {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1024},
-                                                  {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1024},
-                                                  {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1024},
-                                                  {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1024},
-                                                  {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1024},
-                                                  {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1024},
-                                                  {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1024},
-                                                  {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1024},
-                                                  {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1024},
-                                                  {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1024}};
+    std::array<VkDescriptorPoolSize, 11> pool_sizes = 
+        {VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_SAMPLER, 1024},
+         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1024},
+         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1024},
+         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1024},
+         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1024},
+         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1024},
+         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1024},
+         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1024},
+         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1024},
+         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1024},
+         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1024}};
 
     VkDescriptorPoolCreateInfo pool_info = {};
     pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     pool_info.poolSizeCount = pool_sizes.size();
     pool_info.pPoolSizes = pool_sizes.data();
     pool_info.maxSets = pool_sizes.size() * 1024;
-    ;
     pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
 
-    VK_CHECK(vkCreateDescriptorPool(gpu.device, &pool_info, null, &descriptor_pool));
+    VK_CHECK(vkCreateDescriptorPool(gpu.device, &pool_info, nullptr, &descriptor_pool));
 }
 
 void Manager::create_descriptor_sets() {
 
-    Vec<VkDescriptorSetLayout> layouts(Frame::MAX_IN_FLIGHT, descriptor_layout);
+    std::vector<VkDescriptorSetLayout> layouts(Frame::MAX_IN_FLIGHT, descriptor_layout);
 
     VkDescriptorSetAllocateInfo alloc_info = {};
     alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -1459,10 +1468,10 @@ void Manager::create_descriptor_sets() {
     alloc_info.descriptorSetCount = Frame::MAX_IN_FLIGHT;
     alloc_info.pSetLayouts = layouts.data();
 
-    descriptor_sets.extend(Frame::MAX_IN_FLIGHT);
+    descriptor_sets.resize(Frame::MAX_IN_FLIGHT);
     VK_CHECK(vkAllocateDescriptorSets(gpu.device, &alloc_info, descriptor_sets.data()));
 
-    for(u32 i = 0; i < Frame::MAX_IN_FLIGHT; i++) {
+    for(unsigned int i = 0; i < Frame::MAX_IN_FLIGHT; i++) {
 
         VkDescriptorBufferInfo buf_info = {};
         buf_info.buffer = uniform_buffers[i].first;
@@ -1492,15 +1501,15 @@ void Manager::create_descriptor_sets() {
         desc_writes[1].descriptorCount = 1;
         desc_writes[1].pImageInfo = &img_info;
 
-        vkUpdateDescriptorSets(gpu.device, 2, desc_writes, 0, null);
+        vkUpdateDescriptorSets(gpu.device, 2, desc_writes, 0, nullptr);
     }
 }
 
-Pair<VkImage, VkDeviceMemory> Manager::create_image(u32 width, u32 height, VkFormat format,
+std::pair<VkImage, VkDeviceMemory> Manager::create_image(unsigned int width, unsigned int height, VkFormat format,
                                                     VkImageTiling tiling, VkImageUsageFlags usage,
                                                     VkMemoryPropertyFlags properties) {
 
-    Pair<VkImage, VkDeviceMemory> image;
+    std::pair<VkImage, VkDeviceMemory> image;
 
     VkImageCreateInfo img_info = {};
     img_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -1518,7 +1527,7 @@ Pair<VkImage, VkDeviceMemory> Manager::create_image(u32 width, u32 height, VkFor
     img_info.samples = VK_SAMPLE_COUNT_1_BIT;
     img_info.flags = 0;
 
-    VK_CHECK(vkCreateImage(gpu.device, &img_info, null, &image.first));
+    VK_CHECK(vkCreateImage(gpu.device, &img_info, nullptr, &image.first));
 
     VkMemoryRequirements mem_req;
     vkGetImageMemoryRequirements(gpu.device, image.first, &mem_req);
@@ -1528,14 +1537,14 @@ Pair<VkImage, VkDeviceMemory> Manager::create_image(u32 width, u32 height, VkFor
     alloc_info.allocationSize = mem_req.size;
     alloc_info.memoryTypeIndex = choose_memory_type(mem_req.memoryTypeBits, properties);
 
-    VK_CHECK(vkAllocateMemory(gpu.device, &alloc_info, null, &image.second));
+    VK_CHECK(vkAllocateMemory(gpu.device, &alloc_info, nullptr, &image.second));
 
     vkBindImageMemory(gpu.device, image.first, image.second, 0);
 
     return image;
 }
 
-void Manager::buffer_to_image(VkBuffer buffer, VkImage image, u32 w, u32 h) {
+void Manager::buffer_to_image(VkBuffer buffer, VkImage image, unsigned int w, unsigned int h) {
 
     VkCommandBuffer cmds = allocate_buf_ots();
 
@@ -1609,14 +1618,14 @@ void Manager::transition_image(VkImage image, VkFormat format, VkImageLayout old
         die("Unsupported image layout transition!");
     }
 
-    vkCmdPipelineBarrier(cmds, src_stage, dst_stage, 0, 0, null, 0, null, 1, &barrier);
+    vkCmdPipelineBarrier(cmds, src_stage, dst_stage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
 
     run_wait_free_buf(cmds);
 }
 
 void Manager::create_texture() {
 
-    Image img = Image<>::load("numbat.jpg").move();
+    Image img = Image::load("numbat.jpg").value();
 
     auto [w, h] = img.dim();
     
@@ -1641,8 +1650,8 @@ void Manager::create_texture() {
     transition_image(texture.first, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
-    vkDestroyBuffer(gpu.device, staging.first, null);
-    vkFreeMemory(gpu.device, staging.second, null);
+    vkDestroyBuffer(gpu.device, staging.first, nullptr);
+    vkFreeMemory(gpu.device, staging.second, nullptr);
 }
 
 VkImageView Manager::create_image_view(VkImage image, VkFormat format, VkImageAspectFlags aspect) {
@@ -1664,7 +1673,7 @@ VkImageView Manager::create_image_view(VkImage image, VkFormat format, VkImageAs
     view_info.subresourceRange.baseArrayLayer = 0;
     view_info.subresourceRange.layerCount = 1;
 
-    VK_CHECK(vkCreateImageView(gpu.device, &view_info, null, &ret));
+    VK_CHECK(vkCreateImageView(gpu.device, &view_info, nullptr, &ret));
     return ret;
 }
 
@@ -1690,7 +1699,7 @@ void Manager::create_texture_view_and_sampler() {
     sample_info.minLod = 0.0f;
     sample_info.maxLod = 0.0f;
 
-    VK_CHECK(vkCreateSampler(gpu.device, &sample_info, null, &texture_sampler));
+    VK_CHECK(vkCreateSampler(gpu.device, &sample_info, nullptr, &texture_sampler));
 }
 
 VkFormat Manager::find_depth_format() {

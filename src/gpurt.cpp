@@ -30,7 +30,7 @@ void GPURT::load_scene(bool clear) {
 
     Scene::Load_Opts load_opt;
     load_opt.new_scene = clear;
-    
+
     scene.load(load_opt, std::string(path), cam);
     free(path);
 }
@@ -59,8 +59,7 @@ void GPURT::UIsidebar() {
         ImGui::Columns(2);
 
         scene.for_objs([&, this](Object& obj) {
-            
-            if(i++ == (s+1)/2) ImGui::NextColumn();
+            if(i++ == (s + 1) / 2) ImGui::NextColumn();
             ImGui::PushID(obj.id());
 
             ImGui::Text("Obj %d", obj.id());
@@ -83,7 +82,7 @@ void GPURT::UIsidebar() {
     }
 
     if(selected_id) {
-        
+
         Object& selected = scene.get(selected_id);
         Pose& pose = selected.pose;
 

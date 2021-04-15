@@ -2,10 +2,10 @@
 #pragma once
 
 #include <SDL2/SDL.h>
-#include <vector>
 #include <array>
-#include <vulkan/vulkan.h>
 #include <lib/mathlib.h>
+#include <vector>
+#include <vulkan/vulkan.h>
 
 namespace VK {
 
@@ -18,7 +18,9 @@ public:
     };
 
     Mesh() = default;
-    Mesh(std::vector<Vert>&& vertices, std::vector<Index>&& indices) : _verts(std::move(vertices)), _idxs(std::move(indices)) {}
+    Mesh(std::vector<Vert>&& vertices, std::vector<Index>&& indices)
+        : _verts(std::move(vertices)), _idxs(std::move(indices)) {
+    }
     Mesh(const Mesh& src) = delete;
     Mesh(Mesh&& src) = default;
     ~Mesh() = default;
@@ -84,7 +86,7 @@ struct Swapchain {
     std::vector<Swapchain_Image> images;
 
     float aspect_ratio();
-    std::pair<unsigned int,unsigned int> dim();
+    std::pair<unsigned int, unsigned int> dim();
 };
 
 struct Frame {
@@ -185,19 +187,24 @@ private:
 
     VkShaderModule create_shader(const std::vector<unsigned char>& data);
     void copy_buffer(VkBuffer src, VkBuffer dst, VkDeviceSize size);
-    std::pair<VkBuffer, VkDeviceMemory> create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
+    std::pair<VkBuffer, VkDeviceMemory> create_buffer(VkDeviceSize size, VkBufferUsageFlags usage,
+                                                      VkMemoryPropertyFlags properties);
 
     void buffer_to_image(VkBuffer buffer, VkImage image, unsigned int w, unsigned int h);
     VkImageView create_image_view(VkImage image, VkFormat format, VkImageAspectFlags aspect);
     void transition_image(VkImage image, VkFormat format, VkImageLayout old_l, VkImageLayout new_l);
-    std::pair<VkImage, VkDeviceMemory> create_image(unsigned int width, unsigned int height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties);
+    std::pair<VkImage, VkDeviceMemory> create_image(unsigned int width, unsigned int height,
+                                                    VkFormat format, VkImageTiling tiling,
+                                                    VkImageUsageFlags usage,
+                                                    VkMemoryPropertyFlags properties);
 
     VkFormat find_depth_format();
     bool format_has_stencil(VkFormat format);
 
     VkExtent2D choose_surface_extent();
     unsigned int choose_memory_type(unsigned int filter, VkMemoryPropertyFlags properties);
-    VkFormat choose_supported_format(const std::vector<VkFormat>& formats, VkImageTiling tiling, VkFormatFeatureFlags features);
+    VkFormat choose_supported_format(const std::vector<VkFormat>& formats, VkImageTiling tiling,
+                                     VkFormatFeatureFlags features);
 };
 
 } // namespace VK

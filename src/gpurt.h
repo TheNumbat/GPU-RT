@@ -19,7 +19,7 @@ private:
     void render();
     void render_ui();
     void apply_window_dim(Vec2 new_dim);
-    
+
     void UIsidebar();
     void load_scene(bool clear);
     void edit_material(Material& opt);

@@ -2,9 +2,9 @@
 #pragma once
 
 #include "vulkan.h"
-#include <optional>
 #include <SDL2/SDL.h>
 #include <lib/mathlib.h>
+#include <optional>
 
 class Window {
 public:

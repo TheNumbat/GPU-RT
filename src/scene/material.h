@@ -9,7 +9,8 @@ extern const char* Material_Type_Names[(int)Material_Type::count];
 class Material {
 public:
     Material() = default;
-    Material(Material_Type type) : type(type) {}
+    Material(Material_Type type) : type(type) {
+    }
     Material(const Material& src) = default;
     Material(Material&& src) = default;
     ~Material() = default;

@@ -86,23 +86,23 @@ struct ImGui_ImplVulkanH_WindowRenderBuffers {
 
 // Vulkan data
 static ImGui_ImplVulkan_InitInfo g_VulkanInitInfo = {};
-static VkRenderPass g_RenderPass = VK_NULL_HANDLE;
+static VkRenderPass g_RenderPass = nullptr;
 static VkDeviceSize g_BufferMemoryAlignment = 256;
 static VkPipelineCreateFlags g_PipelineCreateFlags = 0x00;
-static VkDescriptorSetLayout g_DescriptorSetLayout = VK_NULL_HANDLE;
-static VkPipelineLayout g_PipelineLayout = VK_NULL_HANDLE;
-static VkDescriptorSet g_DescriptorSet = VK_NULL_HANDLE;
-static VkPipeline g_Pipeline = VK_NULL_HANDLE;
+static VkDescriptorSetLayout g_DescriptorSetLayout = nullptr;
+static VkPipelineLayout g_PipelineLayout = nullptr;
+static VkDescriptorSet g_DescriptorSet = nullptr;
+static VkPipeline g_Pipeline = nullptr;
 static VkShaderModule g_ShaderModuleVert;
 static VkShaderModule g_ShaderModuleFrag;
 
 // Font data
-static VkSampler g_FontSampler = VK_NULL_HANDLE;
-static VkDeviceMemory g_FontMemory = VK_NULL_HANDLE;
-static VkImage g_FontImage = VK_NULL_HANDLE;
-static VkImageView g_FontView = VK_NULL_HANDLE;
-static VkDeviceMemory g_UploadBufferMemory = VK_NULL_HANDLE;
-static VkBuffer g_UploadBuffer = VK_NULL_HANDLE;
+static VkSampler g_FontSampler = nullptr;
+static VkDeviceMemory g_FontMemory = nullptr;
+static VkImage g_FontImage = nullptr;
+static VkImageView g_FontView = nullptr;
+static VkDeviceMemory g_UploadBufferMemory = nullptr;
+static VkBuffer g_UploadBuffer = nullptr;
 
 // Render buffers
 static ImGui_ImplVulkanH_WindowRenderBuffers g_MainWindowRenderBuffers;
@@ -259,8 +259,8 @@ static void CreateOrResizeBuffer(VkBuffer& buffer, VkDeviceMemory& buffer_memory
                                  VkBufferUsageFlagBits usage) {
     ImGui_ImplVulkan_InitInfo* v = &g_VulkanInitInfo;
     VkResult err;
-    if(buffer != VK_NULL_HANDLE) vkDestroyBuffer(v->Device, buffer, v->Allocator);
-    if(buffer_memory != VK_NULL_HANDLE) vkFreeMemory(v->Device, buffer_memory, v->Allocator);
+    if(buffer != nullptr) vkDestroyBuffer(v->Device, buffer, v->Allocator);
+    if(buffer_memory != nullptr) vkFreeMemory(v->Device, buffer_memory, v->Allocator);
 
     VkDeviceSize vertex_buffer_size_aligned =
         ((new_size - 1) / g_BufferMemoryAlignment + 1) * g_BufferMemoryAlignment;
@@ -350,7 +350,7 @@ void ImGui_ImplVulkan_RenderDrawData(ImDrawData* draw_data, VkCommandBuffer comm
     if(fb_width <= 0 || fb_height <= 0) return;
 
     ImGui_ImplVulkan_InitInfo* v = &g_VulkanInitInfo;
-    if(pipeline == VK_NULL_HANDLE) pipeline = g_Pipeline;
+    if(pipeline == nullptr) pipeline = g_Pipeline;
 
     // Allocate array to store enough vertex/index buffers
     ImGui_ImplVulkanH_WindowRenderBuffers* wrb = &g_MainWindowRenderBuffers;
@@ -370,10 +370,10 @@ void ImGui_ImplVulkan_RenderDrawData(ImDrawData* draw_data, VkCommandBuffer comm
         // Create or resize the vertex/index buffers
         size_t vertex_size = draw_data->TotalVtxCount * sizeof(ImDrawVert);
         size_t index_size = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
-        if(rb->VertexBuffer == VK_NULL_HANDLE || rb->VertexBufferSize < vertex_size)
+        if(rb->VertexBuffer == nullptr || rb->VertexBufferSize < vertex_size)
             CreateOrResizeBuffer(rb->VertexBuffer, rb->VertexBufferMemory, rb->VertexBufferSize,
                                  vertex_size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
-        if(rb->IndexBuffer == VK_NULL_HANDLE || rb->IndexBufferSize < index_size)
+        if(rb->IndexBuffer == nullptr || rb->IndexBufferSize < index_size)
             CreateOrResizeBuffer(rb->IndexBuffer, rb->IndexBufferMemory, rb->IndexBufferSize,
                                  index_size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
 
@@ -884,11 +884,11 @@ void ImGui_ImplVulkan_DestroyFontUploadObjects() {
     ImGui_ImplVulkan_InitInfo* v = &g_VulkanInitInfo;
     if(g_UploadBuffer) {
         vkDestroyBuffer(v->Device, g_UploadBuffer, v->Allocator);
-        g_UploadBuffer = VK_NULL_HANDLE;
+        g_UploadBuffer = nullptr;
     }
     if(g_UploadBufferMemory) {
         vkFreeMemory(v->Device, g_UploadBufferMemory, v->Allocator);
-        g_UploadBufferMemory = VK_NULL_HANDLE;
+        g_UploadBufferMemory = nullptr;
     }
 }
 
@@ -900,39 +900,39 @@ void ImGui_ImplVulkan_DestroyDeviceObjects() {
 
     if(g_ShaderModuleVert) {
         vkDestroyShaderModule(v->Device, g_ShaderModuleVert, v->Allocator);
-        g_ShaderModuleVert = VK_NULL_HANDLE;
+        g_ShaderModuleVert = nullptr;
     }
     if(g_ShaderModuleFrag) {
         vkDestroyShaderModule(v->Device, g_ShaderModuleFrag, v->Allocator);
-        g_ShaderModuleFrag = VK_NULL_HANDLE;
+        g_ShaderModuleFrag = nullptr;
     }
     if(g_FontView) {
         vkDestroyImageView(v->Device, g_FontView, v->Allocator);
-        g_FontView = VK_NULL_HANDLE;
+        g_FontView = nullptr;
     }
     if(g_FontImage) {
         vkDestroyImage(v->Device, g_FontImage, v->Allocator);
-        g_FontImage = VK_NULL_HANDLE;
+        g_FontImage = nullptr;
     }
     if(g_FontMemory) {
         vkFreeMemory(v->Device, g_FontMemory, v->Allocator);
-        g_FontMemory = VK_NULL_HANDLE;
+        g_FontMemory = nullptr;
     }
     if(g_FontSampler) {
         vkDestroySampler(v->Device, g_FontSampler, v->Allocator);
-        g_FontSampler = VK_NULL_HANDLE;
+        g_FontSampler = nullptr;
     }
     if(g_DescriptorSetLayout) {
         vkDestroyDescriptorSetLayout(v->Device, g_DescriptorSetLayout, v->Allocator);
-        g_DescriptorSetLayout = VK_NULL_HANDLE;
+        g_DescriptorSetLayout = nullptr;
     }
     if(g_PipelineLayout) {
         vkDestroyPipelineLayout(v->Device, g_PipelineLayout, v->Allocator);
-        g_PipelineLayout = VK_NULL_HANDLE;
+        g_PipelineLayout = nullptr;
     }
     if(g_Pipeline) {
         vkDestroyPipeline(v->Device, g_Pipeline, v->Allocator);
-        g_Pipeline = VK_NULL_HANDLE;
+        g_Pipeline = nullptr;
     }
 }
 
@@ -944,14 +944,14 @@ bool ImGui_ImplVulkan_Init(ImGui_ImplVulkan_InitInfo* info, VkRenderPass render_
         ImGuiBackendFlags_RendererHasVtxOffset; // We can honor the ImDrawCmd::VtxOffset field,
                                                 // allowing for large meshes.
 
-    IM_ASSERT(info->Instance != VK_NULL_HANDLE);
-    IM_ASSERT(info->PhysicalDevice != VK_NULL_HANDLE);
-    IM_ASSERT(info->Device != VK_NULL_HANDLE);
-    IM_ASSERT(info->Queue != VK_NULL_HANDLE);
-    IM_ASSERT(info->DescriptorPool != VK_NULL_HANDLE);
+    IM_ASSERT(info->Instance != nullptr);
+    IM_ASSERT(info->PhysicalDevice != nullptr);
+    IM_ASSERT(info->Device != nullptr);
+    IM_ASSERT(info->Queue != nullptr);
+    IM_ASSERT(info->DescriptorPool != nullptr);
     IM_ASSERT(info->MinImageCount >= 2);
     IM_ASSERT(info->ImageCount >= info->MinImageCount);
-    IM_ASSERT(render_pass != VK_NULL_HANDLE);
+    IM_ASSERT(render_pass != nullptr);
 
     g_VulkanInitInfo = *info;
     g_RenderPass = render_pass;
@@ -1070,7 +1070,7 @@ void ImGui_ImplVulkanH_CreateWindowCommandBuffers(VkPhysicalDevice physical_devi
                                                   ImGui_ImplVulkanH_Window* wd,
                                                   uint32_t queue_family,
                                                   const VkAllocationCallbacks* allocator) {
-    IM_ASSERT(physical_device != VK_NULL_HANDLE && device != VK_NULL_HANDLE);
+    IM_ASSERT(physical_device != nullptr && device != nullptr);
     (void)physical_device;
     (void)allocator;
 
@@ -1245,7 +1245,7 @@ void ImGui_ImplVulkanH_CreateWindowSwapChain(VkPhysicalDevice physical_device, V
 
         // We do not create a pipeline by default as this is also used by examples' main.cpp,
         // but secondary viewport in multi-viewport mode may want to create one with:
-        // ImGui_ImplVulkan_CreatePipeline(device, allocator, VK_NULL_HANDLE, wd->RenderPass,
+        // ImGui_ImplVulkan_CreatePipeline(device, allocator, nullptr, wd->RenderPass,
         // VK_SAMPLE_COUNT_1_BIT, &wd->Pipeline);
     }
 
@@ -1330,9 +1330,9 @@ void ImGui_ImplVulkanH_DestroyFrame(VkDevice device, ImGui_ImplVulkanH_Frame* fd
     vkDestroyFence(device, fd->Fence, allocator);
     vkFreeCommandBuffers(device, fd->CommandPool, 1, &fd->CommandBuffer);
     vkDestroyCommandPool(device, fd->CommandPool, allocator);
-    fd->Fence = VK_NULL_HANDLE;
-    fd->CommandBuffer = VK_NULL_HANDLE;
-    fd->CommandPool = VK_NULL_HANDLE;
+    fd->Fence = nullptr;
+    fd->CommandBuffer = nullptr;
+    fd->CommandPool = nullptr;
 
     vkDestroyImageView(device, fd->BackbufferView, allocator);
     vkDestroyFramebuffer(device, fd->Framebuffer, allocator);
@@ -1343,7 +1343,7 @@ void ImGui_ImplVulkanH_DestroyFrameSemaphores(VkDevice device,
                                               const VkAllocationCallbacks* allocator) {
     vkDestroySemaphore(device, fsd->ImageAcquiredSemaphore, allocator);
     vkDestroySemaphore(device, fsd->RenderCompleteSemaphore, allocator);
-    fsd->ImageAcquiredSemaphore = fsd->RenderCompleteSemaphore = VK_NULL_HANDLE;
+    fsd->ImageAcquiredSemaphore = fsd->RenderCompleteSemaphore = nullptr;
 }
 
 void ImGui_ImplVulkanH_DestroyFrameRenderBuffers(VkDevice device,
@@ -1351,19 +1351,19 @@ void ImGui_ImplVulkanH_DestroyFrameRenderBuffers(VkDevice device,
                                                  const VkAllocationCallbacks* allocator) {
     if(buffers->VertexBuffer) {
         vkDestroyBuffer(device, buffers->VertexBuffer, allocator);
-        buffers->VertexBuffer = VK_NULL_HANDLE;
+        buffers->VertexBuffer = nullptr;
     }
     if(buffers->VertexBufferMemory) {
         vkFreeMemory(device, buffers->VertexBufferMemory, allocator);
-        buffers->VertexBufferMemory = VK_NULL_HANDLE;
+        buffers->VertexBufferMemory = nullptr;
     }
     if(buffers->IndexBuffer) {
         vkDestroyBuffer(device, buffers->IndexBuffer, allocator);
-        buffers->IndexBuffer = VK_NULL_HANDLE;
+        buffers->IndexBuffer = nullptr;
     }
     if(buffers->IndexBufferMemory) {
         vkFreeMemory(device, buffers->IndexBufferMemory, allocator);
-        buffers->IndexBufferMemory = VK_NULL_HANDLE;
+        buffers->IndexBufferMemory = nullptr;
     }
     buffers->VertexBufferSize = 0;
     buffers->IndexBufferSize = 0;

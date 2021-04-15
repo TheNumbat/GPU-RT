@@ -33,8 +33,9 @@ void Window::init() {
         die("Failed to initialize SDL: %s", SDL_GetError());
     }
 
-    window = SDL_CreateWindow("FCPW-GPU", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1280, 720,
-                              SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_VULKAN);
+    window =
+        SDL_CreateWindow("FCPW-GPU", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1280, 720,
+                         SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_VULKAN);
     if(!window) {
         die("Failed to create window: %s", SDL_GetError());
     }

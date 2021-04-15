@@ -2,29 +2,24 @@
 #include "vulkan.h"
 #include "imgui_impl_vulkan.h"
 
-#include <lib/log.h>
 #include <SDL2/SDL_vulkan.h>
-#include <util/image.h>
+#include <lib/log.h>
 #include <util/files.h>
+#include <util/image.h>
 
 namespace VK {
 
-const std::vector<Vertex> vertices = {
-    {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-    {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-    {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-    {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
+const std::vector<Vertex> vertices = {{{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+                                      {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+                                      {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+                                      {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
 
-    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-    {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-    {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-    {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}
-};
+                                      {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+                                      {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+                                      {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+                                      {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}};
 
-const std::vector<unsigned short> indices = {
-    0, 1, 2, 2, 3, 0,
-    4, 5, 6, 6, 7, 4
-};
+const std::vector<unsigned short> indices = {0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4};
 
 VkVertexInputBindingDescription Vertex::bind_desc() {
     VkVertexInputBindingDescription desc = {};
@@ -100,41 +95,41 @@ static std::string vk_obj_type(VkObjectType type) {
     switch(type) {
 #define STR(r)                                                                                     \
     case VK_OBJECT_TYPE_##r: return #r
-    STR(UNKNOWN);
-    STR(INSTANCE);
-    STR(PHYSICAL_DEVICE);
-    STR(DEVICE);
-    STR(QUEUE);
-    STR(SEMAPHORE);
-    STR(COMMAND_BUFFER);
-    STR(FENCE);
-    STR(DEVICE_MEMORY);
-    STR(BUFFER);
-    STR(IMAGE);
-    STR(EVENT);
-    STR(QUERY_POOL);
-    STR(BUFFER_VIEW);
-    STR(IMAGE_VIEW);
-    STR(SHADER_MODULE);
-    STR(PIPELINE_CACHE);
-    STR(PIPELINE_LAYOUT);
-    STR(RENDER_PASS);
-    STR(PIPELINE);
-    STR(DESCRIPTOR_SET_LAYOUT);
-    STR(SAMPLER);
-    STR(DESCRIPTOR_POOL);
-    STR(DESCRIPTOR_SET);
-    STR(FRAMEBUFFER);
-    STR(COMMAND_POOL);
-    STR(SAMPLER_YCBCR_CONVERSION);
-    STR(DESCRIPTOR_UPDATE_TEMPLATE);
-    STR(SURFACE_KHR);
-    STR(SWAPCHAIN_KHR);
-    STR(DISPLAY_KHR);
-    STR(DISPLAY_MODE_KHR);
-    STR(DEBUG_REPORT_CALLBACK_EXT);
-    STR(DEBUG_UTILS_MESSENGER_EXT);
-    STR(VALIDATION_CACHE_EXT);
+        STR(UNKNOWN);
+        STR(INSTANCE);
+        STR(PHYSICAL_DEVICE);
+        STR(DEVICE);
+        STR(QUEUE);
+        STR(SEMAPHORE);
+        STR(COMMAND_BUFFER);
+        STR(FENCE);
+        STR(DEVICE_MEMORY);
+        STR(BUFFER);
+        STR(IMAGE);
+        STR(EVENT);
+        STR(QUERY_POOL);
+        STR(BUFFER_VIEW);
+        STR(IMAGE_VIEW);
+        STR(SHADER_MODULE);
+        STR(PIPELINE_CACHE);
+        STR(PIPELINE_LAYOUT);
+        STR(RENDER_PASS);
+        STR(PIPELINE);
+        STR(DESCRIPTOR_SET_LAYOUT);
+        STR(SAMPLER);
+        STR(DESCRIPTOR_POOL);
+        STR(DESCRIPTOR_SET);
+        STR(FRAMEBUFFER);
+        STR(COMMAND_POOL);
+        STR(SAMPLER_YCBCR_CONVERSION);
+        STR(DESCRIPTOR_UPDATE_TEMPLATE);
+        STR(SURFACE_KHR);
+        STR(SWAPCHAIN_KHR);
+        STR(DISPLAY_KHR);
+        STR(DISPLAY_MODE_KHR);
+        STR(DEBUG_REPORT_CALLBACK_EXT);
+        STR(DEBUG_UTILS_MESSENGER_EXT);
+        STR(VALIDATION_CACHE_EXT);
 #undef STR
     default: return "UNKNOWN_ERROR";
     }
@@ -154,7 +149,7 @@ void Manager::begin_frame() {
     vkWaitForFences(gpu.device, 1, &frame.fence, VK_TRUE, UINT64_MAX);
 
     VkResult result = vkAcquireNextImageKHR(gpu.device, swapchain.swapchain, UINT64_MAX,
-                                            frame.avail, VK_NULL_HANDLE, &current_img);
+                                            frame.avail, nullptr, &current_img);
 
     if(result == VK_ERROR_OUT_OF_DATE_KHR) {
         recreate_swapchain();
@@ -179,8 +174,9 @@ void Manager::submit_frame(std::vector<VkCommandBuffer>&& buffers) {
     Swapchain_Image& image = swapchain.images[current_img];
 
     if(frame.secondary.size())
-        vkFreeCommandBuffers(gpu.device, command_pool, frame.secondary.size(), frame.secondary.data());
-        
+        vkFreeCommandBuffers(gpu.device, command_pool, frame.secondary.size(),
+                             frame.secondary.data());
+
     for(VkCommandBuffer& buf : buffers) {
         vkEndCommandBuffer(buf);
     }
@@ -234,7 +230,7 @@ void Manager::submit_frame(std::vector<VkCommandBuffer>&& buffers) {
     frame.secondary = std::move(buffers);
 }
 
-std::pair<unsigned int,unsigned int> Swapchain::dim() {
+std::pair<unsigned int, unsigned int> Swapchain::dim() {
     return {extent.width, extent.height};
 }
 
@@ -418,7 +414,7 @@ void Manager::init(SDL_Window* sdl_window) {
 
     create_swapchain();
     create_output_pass();
-    
+
     create_depth_buf();
     create_framebuffers();
 
@@ -466,7 +462,7 @@ void Manager::run_wait_free_buf(VkCommandBuffer cmds) {
     submit_info.commandBufferCount = 1;
     submit_info.pCommandBuffers = &cmds;
 
-    VK_CHECK(vkQueueSubmit(gpu.graphics_queue, 1, &submit_info, VK_NULL_HANDLE));
+    VK_CHECK(vkQueueSubmit(gpu.graphics_queue, 1, &submit_info, nullptr));
     VK_CHECK(vkQueueWaitIdle(gpu.graphics_queue));
 
     vkFreeCommandBuffers(gpu.device, command_pool, 1, &cmds);
@@ -577,36 +573,37 @@ void Manager::destroy() {
 
 static VkBool32 debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT sev,
                                VkDebugUtilsMessageTypeFlagsEXT type,
-                               const VkDebugUtilsMessengerCallbackDataEXT *data,
-                               void *user_data)
-{
+                               const VkDebugUtilsMessengerCallbackDataEXT* data, void* user_data) {
     // Ignore VUID-VkSwapchainCreateInfoKHR-imageExtent-01274
     // cf. https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/1340
-    if (data->messageIdNumber == 0x7cd0911d)
-        return false;
+    if(data->messageIdNumber == 0x7cd0911d) return false;
 
     std::string message(data->pMessage);
 
     // Ignore these
-    if(message.starts_with("Device Extension") || message.starts_with("Unloading layer library") || message.starts_with("Loading layer library")) {
+    if(message.find("Device Extension") != std::string::npos ||
+       message.find("Unloading layer library") != std::string::npos ||
+       message.find("Loading layer library") != std::string::npos) {
         return false;
     }
 
-    if(sev == VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT || sev == VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) 
+    if(sev == VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT ||
+       sev == VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
         info("[VK] %s (%d)", message.c_str(), data->messageIdNumber);
     else
         warn("[VK] %s", message.c_str());
 
-    for (unsigned int i = 0; i < data->queueLabelCount; i++)
+    for(unsigned int i = 0; i < data->queueLabelCount; i++)
         info("\tduring %s", data->pQueueLabels[i].pLabelName);
-    for (unsigned int i = 0; i < data->cmdBufLabelCount; i++)
+    for(unsigned int i = 0; i < data->cmdBufLabelCount; i++)
         info("\tinside %s", data->pCmdBufLabels[i].pLabelName);
-    
-    for (unsigned int i = 0; i < data->objectCount; i++) {
-        const VkDebugUtilsObjectNameInfoEXT *obj = &data->pObjects[i];
-        info("\tusing %s: %s (%zu)", vk_obj_type(obj->objectType).c_str(), obj->pObjectName ? obj->pObjectName : "?", obj->objectHandle);
+
+    for(unsigned int i = 0; i < data->objectCount; i++) {
+        const VkDebugUtilsObjectNameInfoEXT* obj = &data->pObjects[i];
+        info("\tusing %s: %s (%zu)", vk_obj_type(obj->objectType).c_str(),
+             obj->pObjectName ? obj->pObjectName : "?", obj->objectHandle);
     }
-    
+
     if(sev == VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
         DEBUG_BREAK;
     }
@@ -631,17 +628,27 @@ void Manager::init_debug_callback() {
     callback.pUserData = this;
 
     PFN_vkCreateDebugUtilsMessengerEXT func =
-        (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(info.instance, "vkCreateDebugUtilsMessengerEXT");
-    if(!func) die("Could not find vkCreateDebugUtilsMessengerEXT");
-    VK_CHECK(func(info.instance, &callback, nullptr, &info.debug_callback_info));
+        (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(info.instance,
+                                                                  "vkCreateDebugUtilsMessengerEXT");
+
+    if(func) {
+        VK_CHECK(func(info.instance, &callback, nullptr, &info.debug_callback_info));
+    } else {
+        warn("Could not find vkCreateDebugUtilsMessengerEXT");
+    }
 }
 
 void Manager::destroy_debug_callback() {
 
     PFN_vkDestroyDebugUtilsMessengerEXT func =
-        (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(info.instance, "vkDestroyDebugUtilsMessengerEXT");
-    if(!func) die("Could not find vkDestroyDebugUtilsMessengerEXT");
-    func(info.instance, info.debug_callback_info, nullptr);
+        (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
+            info.instance, "vkDestroyDebugUtilsMessengerEXT");
+
+    if(func) {
+        func(info.instance, info.debug_callback_info, nullptr);
+    } else {
+        warn("Could not find vkDestroyDebugUtilsMessengerEXT");
+    }
 }
 
 void Manager::create_instance() {
@@ -649,10 +656,10 @@ void Manager::create_instance() {
     VkApplicationInfo app_info = {};
     app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     app_info.pApplicationName = "GPURT";
-    app_info.applicationVersion = VK_MAKE_VERSION(0, 0, 2);
+    app_info.applicationVersion = VK_MAKE_VERSION(0, 0, 1);
     app_info.pEngineName = "GPURT";
-    app_info.engineVersion = VK_MAKE_VERSION(0, 0, 2);
-    app_info.apiVersion = VK_API_VERSION_1_1;
+    app_info.engineVersion = VK_MAKE_VERSION(0, 0, 1);
+    app_info.apiVersion = VK_API_VERSION_1_2;
 
     VkInstanceCreateInfo create_info = {};
     create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -679,7 +686,8 @@ void Manager::create_instance() {
         die("Failed to get required SDL vk instance extensions: %", SDL_GetError());
     }
     info.inst_ext.insert(info.inst_ext.end(), sdl_count, nullptr);
-    if(!SDL_Vulkan_GetInstanceExtensions(window, &sdl_count, info.inst_ext.data() + info.inst_ext.size() - sdl_count)) {
+    if(!SDL_Vulkan_GetInstanceExtensions(window, &sdl_count,
+                                         info.inst_ext.data() + info.inst_ext.size() - sdl_count)) {
         die("Failed to get required SDL vk instance extensions: %", SDL_GetError());
     }
 
@@ -710,7 +718,8 @@ void Manager::create_instance() {
     VK_CHECK(vkEnumerateInstanceExtensionProperties(nullptr, &total_extensions, nullptr));
     info.extensions.clear();
     info.extensions.resize(total_extensions);
-    VK_CHECK(vkEnumerateInstanceExtensionProperties(nullptr, &total_extensions, info.extensions.data()));
+    VK_CHECK(
+        vkEnumerateInstanceExtensionProperties(nullptr, &total_extensions, info.extensions.data()));
 }
 
 void Manager::enumerate_gpus() {
@@ -721,8 +730,7 @@ void Manager::enumerate_gpus() {
         die("Found no GPUs.");
     }
 
-    std::vector<VkPhysicalDevice> phys_list;
-    phys_list.resize(devices);
+    std::vector<VkPhysicalDevice> phys_list(devices);
     VK_CHECK(vkEnumeratePhysicalDevices(info.instance, &devices, phys_list.data()));
 
     gpus.clear();
@@ -753,8 +761,8 @@ void Manager::enumerate_gpus() {
         }
         {
             unsigned int num_fmts = 0;
-            VK_CHECK(
-                vkGetPhysicalDeviceSurfaceFormatsKHR(g.device, swapchain.surface, &num_fmts, nullptr));
+            VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(g.device, swapchain.surface, &num_fmts,
+                                                          nullptr));
             if(!num_fmts) warn("Found no device surface formats.");
             g.fmts.resize(num_fmts);
             VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(g.device, swapchain.surface, &num_fmts,
@@ -1004,7 +1012,8 @@ void Manager::create_swapchain() {
     sw_info.imageArrayLayers = 1;
     sw_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
-    unsigned int queue_indices[] = {(unsigned int)gpu.data->graphics_idx, (unsigned int)gpu.data->present_idx};
+    unsigned int queue_indices[] = {(unsigned int)gpu.data->graphics_idx,
+                                    (unsigned int)gpu.data->present_idx};
 
     if(gpu.data->graphics_idx != gpu.data->present_idx) {
 
@@ -1032,7 +1041,7 @@ void Manager::create_swapchain() {
 
     swapchain.images.resize(images);
 
-    std::vector<VkImage> image_data(images, VkImage());
+    std::vector<VkImage> image_data(images);
 
     VK_CHECK(vkGetSwapchainImagesKHR(gpu.device, swapchain.swapchain, &images, image_data.data()));
     if(!images) {
@@ -1043,7 +1052,8 @@ void Manager::create_swapchain() {
 
         Swapchain_Image& image = swapchain.images[i];
         image.image = image_data[i];
-        image.view = create_image_view(image.image, swapchain.format.format, VK_IMAGE_ASPECT_COLOR_BIT);
+        image.view =
+            create_image_view(image.image, swapchain.format.format, VK_IMAGE_ASPECT_COLOR_BIT);
     }
 }
 
@@ -1131,7 +1141,7 @@ void Manager::create_pipeline() {
     msaa_info.sampleShadingEnable = VK_FALSE;
     msaa_info.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
     msaa_info.minSampleShading = 1.0f;          // Optional
-    msaa_info.pSampleMask = nullptr;               // Optional
+    msaa_info.pSampleMask = nullptr;            // Optional
     msaa_info.alphaToCoverageEnable = VK_FALSE; // Optional
     msaa_info.alphaToOneEnable = VK_FALSE;      // Optional
 
@@ -1186,7 +1196,7 @@ void Manager::create_pipeline() {
     depth_info.maxDepthBounds = 1.0f; // Optional
     depth_info.stencilTestEnable = VK_FALSE;
     depth_info.front = {}; // Optional
-    depth_info.back = {}; // Optional
+    depth_info.back = {};  // Optional
 
     VkGraphicsPipelineCreateInfo pipeline_info{};
     pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -1203,17 +1213,18 @@ void Manager::create_pipeline() {
     pipeline_info.layout = pipeline_layout;
     pipeline_info.renderPass = output_pass;
     pipeline_info.subpass = 0;
-    pipeline_info.basePipelineHandle = VK_NULL_HANDLE; // Optional
-    pipeline_info.basePipelineIndex = -1;              // Optional
+    pipeline_info.basePipelineHandle = nullptr; // Optional
+    pipeline_info.basePipelineIndex = -1;       // Optional
 
-    VK_CHECK(vkCreateGraphicsPipelines(gpu.device, VK_NULL_HANDLE, 1, &pipeline_info, nullptr,
+    VK_CHECK(vkCreateGraphicsPipelines(gpu.device, nullptr, 1, &pipeline_info, nullptr,
                                        &graphics_pipeline));
 
     vkDestroyShaderModule(gpu.device, v_mod, nullptr);
     vkDestroyShaderModule(gpu.device, f_mod, nullptr);
 }
 
-VkFormat Manager::choose_supported_format(const std::vector<VkFormat>& formats, VkImageTiling tiling, VkFormatFeatureFlags features) {
+VkFormat Manager::choose_supported_format(const std::vector<VkFormat>& formats,
+                                          VkImageTiling tiling, VkFormatFeatureFlags features) {
 
     for(VkFormat format : formats) {
 
@@ -1271,10 +1282,13 @@ void Manager::create_output_pass() {
     VkSubpassDependency dependency = {};
     dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
     dependency.dstSubpass = 0;
-    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    dependency.srcStageMask =
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
     dependency.srcAccessMask = 0;
-    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    dependency.dstStageMask =
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    dependency.dstAccessMask =
+        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
     VkAttachmentDescription attachments[] = {color, depth};
 
@@ -1290,8 +1304,9 @@ void Manager::create_output_pass() {
     VK_CHECK(vkCreateRenderPass(gpu.device, &pass_info, nullptr, &output_pass));
 }
 
-std::pair<VkBuffer, VkDeviceMemory> Manager::create_buffer(VkDeviceSize size, VkBufferUsageFlags usage,
-                                                      VkMemoryPropertyFlags properties) {
+std::pair<VkBuffer, VkDeviceMemory> Manager::create_buffer(VkDeviceSize size,
+                                                           VkBufferUsageFlags usage,
+                                                           VkMemoryPropertyFlags properties) {
 
     VkBuffer out_buf;
     VkDeviceMemory out_mem;
@@ -1435,18 +1450,18 @@ void Manager::create_descriptor_set_layout() {
 
 void Manager::create_descriptor_pool() {
 
-    std::array<VkDescriptorPoolSize, 11> pool_sizes = 
-        {VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_SAMPLER, 1024},
-         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1024},
-         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1024},
-         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1024},
-         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1024},
-         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1024},
-         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1024},
-         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1024},
-         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1024},
-         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1024},
-         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1024}};
+    std::array<VkDescriptorPoolSize, 11> pool_sizes = {
+        VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_SAMPLER, 1024},
+        VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1024},
+        VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1024},
+        VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1024},
+        VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1024},
+        VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1024},
+        VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1024},
+        VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1024},
+        VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1024},
+        VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1024},
+        VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1024}};
 
     VkDescriptorPoolCreateInfo pool_info = {};
     pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1484,7 +1499,7 @@ void Manager::create_descriptor_sets() {
         img_info.sampler = texture_sampler;
 
         VkWriteDescriptorSet desc_writes[2] = {};
-        
+
         desc_writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         desc_writes[0].dstSet = descriptor_sets[i];
         desc_writes[0].dstBinding = 0;
@@ -1505,9 +1520,10 @@ void Manager::create_descriptor_sets() {
     }
 }
 
-std::pair<VkImage, VkDeviceMemory> Manager::create_image(unsigned int width, unsigned int height, VkFormat format,
-                                                    VkImageTiling tiling, VkImageUsageFlags usage,
-                                                    VkMemoryPropertyFlags properties) {
+std::pair<VkImage, VkDeviceMemory> Manager::create_image(unsigned int width, unsigned int height,
+                                                         VkFormat format, VkImageTiling tiling,
+                                                         VkImageUsageFlags usage,
+                                                         VkMemoryPropertyFlags properties) {
 
     std::pair<VkImage, VkDeviceMemory> image;
 
@@ -1594,23 +1610,26 @@ void Manager::transition_image(VkImage image, VkFormat format, VkImageLayout old
     VkPipelineStageFlags src_stage, dst_stage;
 
     if(old_l == VK_IMAGE_LAYOUT_UNDEFINED && new_l == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
-    
+
         barrier.srcAccessMask = 0;
         barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         src_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
         dst_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-    
-    } else if(old_l == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && new_l == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+
+    } else if(old_l == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+              new_l == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
 
         barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
         src_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
         dst_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 
-    } else if(old_l == VK_IMAGE_LAYOUT_UNDEFINED && new_l == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+    } else if(old_l == VK_IMAGE_LAYOUT_UNDEFINED &&
+              new_l == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
 
         barrier.srcAccessMask = 0;
-        barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                                VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
         src_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
         dst_stage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
 
@@ -1628,7 +1647,7 @@ void Manager::create_texture() {
     Image img = Image::load("numbat.jpg").value();
 
     auto [w, h] = img.dim();
-    
+
     VkDeviceSize size = img.bytes();
 
     auto staging =
@@ -1679,7 +1698,8 @@ VkImageView Manager::create_image_view(VkImage image, VkFormat format, VkImageAs
 
 void Manager::create_texture_view_and_sampler() {
 
-    texture_view = create_image_view(texture.first, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
+    texture_view =
+        create_image_view(texture.first, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
 
     VkSamplerCreateInfo sample_info = {};
     sample_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -1704,7 +1724,7 @@ void Manager::create_texture_view_and_sampler() {
 
 VkFormat Manager::find_depth_format() {
     return choose_supported_format(
-        {VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT}, 
+        {VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT},
         VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 }
 
@@ -1715,11 +1735,13 @@ bool Manager::format_has_stencil(VkFormat format) {
 void Manager::create_depth_buf() {
 
     VkFormat format = find_depth_format();
-    depth_image = create_image(swapchain.dim().first, swapchain.dim().second, format, 
-        VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    depth_image = create_image(swapchain.dim().first, swapchain.dim().second, format,
+                               VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                               VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     depth_view = create_image_view(depth_image.first, format, VK_IMAGE_ASPECT_DEPTH_BIT);
 
-    transition_image(depth_image.first, format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-}  
+    transition_image(depth_image.first, format, VK_IMAGE_LAYOUT_UNDEFINED,
+                     VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+}
 
 } // namespace VK

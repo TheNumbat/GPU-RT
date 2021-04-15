@@ -3,18 +3,27 @@
 
 #include <cstdarg>
 #include <cstdio>
+#include <fstream>
+#include <iostream>
 #include <mutex>
 #include <string>
 
 inline std::mutex printf_lock;
+inline std::ofstream log_file("log.txt");
 
 inline void log(std::string fmt, ...) {
     std::lock_guard<std::mutex> lock(printf_lock);
+    static char buffer[512];
     va_list args;
     va_start(args, fmt);
-    vprintf(fmt.c_str(), args);
+    int n = vsnprintf(buffer, 512, fmt.c_str(), args);
     va_end(args);
-    fflush(stdout);
+    if(n < 511)
+        buffer[n] = '\0';
+    else
+        buffer[511] = '\0';
+    std::cout << std::string(buffer);
+    log_file << std::string(buffer);
 }
 
 inline std::string last_file(std::string path) {

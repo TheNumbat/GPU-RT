@@ -6,6 +6,6 @@ set(SOURCES_SF "sf_libs.cpp" "stb_image.h" "stb_image_write.h" "stb_perlin.h" "t
 add_library(sf_libs STATIC ${SOURCES_SF})
 
 if(MSVC)
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Z7")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MP /Z7")
 endif()
 

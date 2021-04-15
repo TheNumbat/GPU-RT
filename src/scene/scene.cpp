@@ -149,8 +149,8 @@ static Material load_material(aiMaterial* ai_mat) {
 }
 
 static void load_node(Scene& scobj, std::vector<std::string>& errors,
-                      std::unordered_map<aiNode*, unsigned int>& node_to_obj,
-                      const aiScene* scene, aiNode* node, aiMatrix4x4 transform) {
+                      std::unordered_map<aiNode*, unsigned int>& node_to_obj, const aiScene* scene,
+                      aiNode* node, aiMatrix4x4 transform) {
 
     transform = transform * node->mTransformation;
 
@@ -165,8 +165,7 @@ static void load_node(Scene& scobj, std::vector<std::string>& errors,
         Vec3 scale = aiVec(ascale);
         Pose p = {pos, Degrees(rot).range(0.0f, 360.0f), scale};
 
-        Material mat_opt =
-            load_material(scene->mMaterials[mesh->mMaterialIndex]);
+        Material mat_opt = load_material(scene->mMaterials[mesh->mMaterialIndex]);
 
         VK::Mesh gmesh = mesh_from(mesh);
 
@@ -179,8 +178,7 @@ static void load_node(Scene& scobj, std::vector<std::string>& errors,
     }
 
     for(unsigned int i = 0; i < node->mNumChildren; i++) {
-        load_node(scobj, errors, node_to_obj, scene, node->mChildren[i],
-                  transform);
+        load_node(scobj, errors, node_to_obj, scene, node->mChildren[i], transform);
     }
 }
 
@@ -248,8 +246,8 @@ std::string Scene::load(Scene::Load_Opts loader, std::string file, Camera& cam) 
 
             std::string name(aiCam.mName.C_Str());
             if(name.find(ANIM_CAM_NAME) == std::string::npos) {
-                cam.load(pos, center, aiCam.mAspect, aiCam.mHorizontalFOV,
-                                          aiCam.mClipPlaneNear, aiCam.mClipPlaneFar);
+                cam.load(pos, center, aiCam.mAspect, aiCam.mHorizontalFOV, aiCam.mClipPlaneNear,
+                         aiCam.mClipPlaneFar);
             }
         };
 

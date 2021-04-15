@@ -1,11 +1,11 @@
 
 #pragma once
 
-#include <util/files.h>
-#include <sf_libs/stb_image.h>
-#include <vector>
 #include <optional>
+#include <sf_libs/stb_image.h>
 #include <string>
+#include <util/files.h>
+#include <vector>
 
 struct Image {
 
@@ -42,8 +42,9 @@ struct Image {
         if(!file_data.has_value()) return false;
 
         int x, y;
-        unsigned char* pixels = stbi_load_from_memory(file_data.value().data(), (int)file_data.value().size(), &x,
-                                           &y, nullptr, STBI_rgb_alpha);
+        unsigned char* pixels =
+            stbi_load_from_memory(file_data.value().data(), (int)file_data.value().size(), &x, &y,
+                                  nullptr, STBI_rgb_alpha);
         if(!pixels) return false;
 
         _data.clear();

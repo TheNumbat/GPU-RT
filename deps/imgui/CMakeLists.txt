@@ -18,7 +18,7 @@ add_library(imgui STATIC ${SOURCES_IMGUI})
 target_include_directories(imgui PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../../src")
 
 if(MSVC)
-    target_compile_options(imgui PRIVATE /fp:fast)
+    target_compile_options(imgui PRIVATE /MP /fp:fast)
 else()
     target_compile_options(imgui PRIVATE -fconcepts -ffast-math)
 endif()

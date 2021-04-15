@@ -1,12 +1,12 @@
 
 #pragma once
 
-#include <unordered_map>
 #include <string>
+#include <unordered_map>
 
+#include "object.h"
 #include <lib/mathlib.h>
 #include <util/camera.h>
-#include "object.h"
 
 class Scene {
 public:
@@ -26,8 +26,7 @@ public:
 
     std::string load(Load_Opts opt, std::string file, Camera& cam);
 
-    template<typename F>
-    void for_objs(F&& func) {
+    template<typename F> void for_objs(F&& func) {
         for(auto& obj : objs) func(obj.second);
     }
 
@@ -40,7 +39,7 @@ public:
     unsigned int used_ids();
 
     Object& get(unsigned int id);
-    
+
 private:
     std::unordered_map<unsigned int, Object> objs;
     unsigned int next_id, first_id;

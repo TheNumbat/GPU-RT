@@ -36,11 +36,7 @@ extern "C" {
 
 #ifndef VK_DEFINE_NON_DISPATCHABLE_HANDLE
     #if (VK_USE_64_BIT_PTR_DEFINES==1)
-        #if __cplusplus >= 201103L
-            #define VK_NULL_HANDLE nullptr
-        #else
-            #define VK_NULL_HANDLE ((void*)0)
-        #endif
+        #define VK_NULL_HANDLE nullptr
     #else
         #define VK_NULL_HANDLE 0ULL
     #endif

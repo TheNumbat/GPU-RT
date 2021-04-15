@@ -1,11 +1,14 @@
 
 #pragma once
 
-#include <SDL2/SDL.h>
-#include <array>
-#include <lib/mathlib.h>
 #include <vector>
+#include <array>
+
+#include <SDL2/SDL.h>
+#include <lib/mathlib.h>
 #include <vulkan/vulkan.h>
+
+#include "vk_mem_alloc.h"
 
 namespace VK {
 
@@ -119,18 +122,20 @@ private:
     // move this into real abstractions lole
     // for rendering quad
     VkDescriptorSetLayout descriptor_layout;
-    std::pair<VkBuffer, VkDeviceMemory> vertex_buffer, index_buffer;
-    std::pair<VkImage, VkDeviceMemory> texture;
+    std::pair<VkBuffer,VmaAllocation> vertex_buffer, index_buffer;
+    std::pair<VkImage,VmaAllocation> texture;
     VkImageView texture_view;
     VkSampler texture_sampler;
 
+    VmaAllocator gpu_alloc;
+
     // per frame in flight
     std::vector<VkDescriptorSet> descriptor_sets;
-    std::vector<std::pair<VkBuffer, VkDeviceMemory>> uniform_buffers;
+    std::vector<std::pair<VkBuffer, VmaAllocation>> uniform_buffers;
     // basic pipeline for rendering quad
     VkPipeline graphics_pipeline;
     VkPipelineLayout pipeline_layout;
-    std::pair<VkImage, VkDeviceMemory> depth_image;
+    std::pair<VkImage, VmaAllocation> depth_image;
     VkImageView depth_view;
 
     unsigned int current_img = 0, current_frame = 0;
@@ -169,6 +174,7 @@ private:
     void create_texture_view_and_sampler();
 
     void create_frames();
+    void create_gpu_alloc();
     void create_swapchain();
     void create_output_pass();
     void create_framebuffers();
@@ -187,16 +193,16 @@ private:
 
     VkShaderModule create_shader(const std::vector<unsigned char>& data);
     void copy_buffer(VkBuffer src, VkBuffer dst, VkDeviceSize size);
-    std::pair<VkBuffer, VkDeviceMemory> create_buffer(VkDeviceSize size, VkBufferUsageFlags usage,
-                                                      VkMemoryPropertyFlags properties);
+    std::pair<VkBuffer, VmaAllocation> create_buffer(VkDeviceSize size, VkBufferUsageFlags buf_usage,
+                                                     VmaMemoryUsage mem_usage);
 
     void buffer_to_image(VkBuffer buffer, VkImage image, unsigned int w, unsigned int h);
     VkImageView create_image_view(VkImage image, VkFormat format, VkImageAspectFlags aspect);
     void transition_image(VkImage image, VkFormat format, VkImageLayout old_l, VkImageLayout new_l);
-    std::pair<VkImage, VkDeviceMemory> create_image(unsigned int width, unsigned int height,
+    std::pair<VkImage, VmaAllocation> create_image(unsigned int width, unsigned int height,
                                                     VkFormat format, VkImageTiling tiling,
-                                                    VkImageUsageFlags usage,
-                                                    VkMemoryPropertyFlags properties);
+                                                    VkImageUsageFlags img_usage,
+                                                    VmaMemoryUsage mem_usage);
 
     VkFormat find_depth_format();
     bool format_has_stencil(VkFormat format);

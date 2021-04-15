@@ -77,7 +77,7 @@ static aiMatrix4x4 node_transform(const aiNode* node) {
 
 static VK::Mesh mesh_from(const aiMesh* mesh) {
 
-    std::vector<VK::Mesh::Vert> mesh_verts;
+    std::vector<VK::Mesh::Vertex> mesh_verts;
     std::vector<VK::Mesh::Index> mesh_inds;
 
     for(unsigned int j = 0; j < mesh->mNumVertices; j++) {

@@ -12,6 +12,16 @@ GPURT::~GPURT() {
 }
 
 void GPURT::render() {
+    
+    VK::Manager& vk = VK::get();
+
+    vk.pipeline->update_uniforms(cam);
+
+    VkCommandBuffer cmds = vk.begin_secondary();
+
+    scene.for_objs([&](const Object& obj) {
+        obj.mesh().render(*vk.pipeline, cmds);
+    });
 }
 
 void GPURT::render_ui() {
@@ -172,6 +182,9 @@ void GPURT::loop() {
 
 void GPURT::event(SDL_Event e) {
 
+    ImGuiIO& IO = ImGui::GetIO();
+    IO.DisplayFramebufferScale = window.scale(Vec2{1.0f, 1.0f});
+
     switch(e.type) {
 
     case SDL_WINDOWEVENT: {
@@ -179,6 +192,70 @@ void GPURT::event(SDL_Event e) {
            e.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
             apply_window_dim(window.drawable());
         }
+    } break;
+
+    case SDL_MOUSEMOTION: {
+
+        Vec2 d(e.motion.xrel, e.motion.yrel);
+        Vec2 p = window.scale(Vec2{e.button.x, e.button.y});
+        Vec2 dim = window.drawable();
+        Vec2 n = Vec2(2.0f * p.x / dim.x - 1.0f, 2.0f * p.y / dim.y - 1.0f);
+
+        if(cam_mode == Camera_Control::orbit) {
+            cam.mouse_orbit(d);
+        } else if(cam_mode == Camera_Control::move) {
+            cam.mouse_move(d);
+        }
+
+    } break;
+
+    case SDL_MOUSEBUTTONDOWN: {
+
+        if(IO.WantCaptureMouse) break;
+
+        Vec2 p = window.scale(Vec2{e.button.x, e.button.y});
+        Vec2 dim = window.drawable();
+        Vec2 n = Vec2(2.0f * p.x / dim.x - 1.0f, 2.0f * p.y / dim.y - 1.0f);
+
+        if(e.button.button == SDL_BUTTON_LEFT) {
+            if(cam_mode == Camera_Control::none &&
+               (window.is_down(SDL_SCANCODE_LSHIFT) | window.is_down(SDL_SCANCODE_RSHIFT))) {
+                cam_mode = Camera_Control::orbit;
+            }
+        } else if(e.button.button == SDL_BUTTON_RIGHT) {
+            if(cam_mode == Camera_Control::none) {
+                cam_mode = Camera_Control::move;
+            }
+        } else if(e.button.button == SDL_BUTTON_MIDDLE) {
+            cam_mode = Camera_Control::orbit;
+        }
+
+    } break;
+
+    case SDL_MOUSEBUTTONUP: {
+
+        Vec2 p = window.scale(Vec2{e.button.x, e.button.y});
+        Vec2 dim = window.drawable();
+        Vec2 n = Vec2(2.0f * p.x / dim.x - 1.0f, 2.0f * p.y / dim.y - 1.0f);
+
+        if(e.button.button == SDL_BUTTON_LEFT) {
+            if(!IO.WantCaptureMouse) {
+                window.ungrab_mouse();
+                break;
+            }
+        }
+
+        if((e.button.button == SDL_BUTTON_LEFT && cam_mode == Camera_Control::orbit) ||
+           (e.button.button == SDL_BUTTON_MIDDLE && cam_mode == Camera_Control::orbit) ||
+           (e.button.button == SDL_BUTTON_RIGHT && cam_mode == Camera_Control::move)) {
+            cam_mode = Camera_Control::none;
+        }
+
+    } break;
+
+    case SDL_MOUSEWHEEL: {
+        if(IO.WantCaptureMouse) break;
+        cam.mouse_radius((float)e.wheel.y);
     } break;
     }
 }

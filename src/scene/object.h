@@ -3,7 +3,7 @@
 
 #include "material.h"
 #include "pose.h"
-#include <platform/vulkan.h>
+#include <vk/render.h>
 
 class Object {
 public:

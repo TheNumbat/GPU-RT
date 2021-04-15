@@ -7,6 +7,8 @@
 #include <util/files.h>
 #include <vector>
 
+namespace Util {
+
 struct Image {
 
     explicit Image() = default;
@@ -70,3 +72,5 @@ private:
     std::vector<unsigned char> _data;
     unsigned int _w = 0, _h = 0;
 };
+
+} // namespace Util

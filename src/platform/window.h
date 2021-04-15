@@ -1,10 +1,10 @@
 
 #pragma once
 
-#include "vulkan.h"
 #include <SDL2/SDL.h>
 #include <lib/mathlib.h>
 #include <optional>
+#include <vk/vulkan.h>
 
 class Window {
 public:
@@ -36,7 +36,6 @@ private:
     void set_dpi();
     void shutdown();
 
-    VK::Manager vulkan;
     SDL_Window* window = nullptr;
     const Uint8* keybuf = nullptr;
 };

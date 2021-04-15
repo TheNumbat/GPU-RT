@@ -14,8 +14,6 @@ set(SOURCES_CLIENT "src/main.cpp"
                    "src/gpurt.cpp"
                    "src/platform/window.h"
                    "src/platform/window.cpp"
-                   "src/platform/vulkan.h"
-                   "src/platform/vulkan.cpp"
                    "src/util/image.h"
                    "src/util/files.h"
                    "src/util/files.cpp"
@@ -31,8 +29,13 @@ set(SOURCES_CLIENT "src/main.cpp"
                    "src/scene/material.cpp"
                    "src/platform/imgui_impl_sdl.h"
                    "src/platform/imgui_impl_sdl.cpp"
-                   "src/platform/imgui_impl_vulkan.h"
-                   "src/platform/imgui_impl_vulkan.cpp")
+                   "src/vk/vk_mem_alloc.h"
+                   "src/vk/vulkan.h"
+                   "src/vk/vulkan.cpp"
+                   "src/vk/imgui_impl_vulkan.h"
+                   "src/vk/imgui_impl_vulkan.cpp"
+                   "src/vk/render.h"
+                   "src/vk/render.cpp")
 
 # setup OS-specific options
 

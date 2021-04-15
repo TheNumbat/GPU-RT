@@ -20,5 +20,6 @@ build*/*
 .cache
 .vscode
 lbuild/
-data/shaders/
+media/shaders/
 debug.log
+media/log.txt

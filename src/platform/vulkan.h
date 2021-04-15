@@ -196,6 +196,8 @@ private:
     std::pair<VkBuffer, VmaAllocation> create_buffer(VkDeviceSize size, VkBufferUsageFlags buf_usage,
                                                      VmaMemoryUsage mem_usage);
 
+    void write_gpu(VmaAllocation buffer, const void* data, size_t size);
+
     void buffer_to_image(VkBuffer buffer, VkImage image, unsigned int w, unsigned int h);
     VkImageView create_image_view(VkImage image, VkFormat format, VkImageAspectFlags aspect);
     void transition_image(VkImage image, VkFormat format, VkImageLayout old_l, VkImageLayout new_l);

@@ -99,6 +99,7 @@ void GPURT::UIsidebar() {
             sliders("Scale", pose.scale, 0.03f);
             if(ImGui::Button("Delete [del]")) {
                 scene.erase(selected_id);
+                selected_id = 0;
             }
 
             ImGui::Unindent();

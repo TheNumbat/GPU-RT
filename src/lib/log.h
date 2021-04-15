@@ -24,6 +24,8 @@ inline void log(std::string fmt, ...) {
         buffer[511] = '\0';
     std::cout << std::string(buffer);
     log_file << std::string(buffer);
+    std::cout.flush();
+    log_file.flush();
 }
 
 inline std::string last_file(std::string path) {

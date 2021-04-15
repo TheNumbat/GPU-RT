@@ -253,10 +253,7 @@ void Manager::update_uniforms() {
     ubo.V = Mat4::look_at({2.0f, 2.0f, 2.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f});
     ubo.P = Mat4::project(90.0f, swapchain.aspect_ratio(), 0.01f);
 
-    void* data;
-    VK_CHECK(vmaMapMemory(gpu_alloc, uniform_buffers[current_frame].second, &data));
-    std::memcpy(data, &ubo, sizeof(ubo));
-    vmaUnmapMemory(gpu_alloc, uniform_buffers[current_frame].second);
+    write_gpu(uniform_buffers[current_frame].second, &ubo, sizeof(ubo));
 }
 
 void Manager::trigger_resize() {
@@ -1347,10 +1344,7 @@ void Manager::create_data_buffers() {
 
         auto staging = create_buffer(buf_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
 
-        void* data;
-        VK_CHECK(vmaMapMemory(gpu_alloc, staging.second, &data));
-        std::memcpy(data, vertices.data(), (size_t)buf_size);
-        vmaUnmapMemory(gpu_alloc, staging.second);
+        write_gpu(staging.second, vertices.data(), (size_t)buf_size);
 
         vertex_buffer = create_buffer(
             buf_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
@@ -1365,10 +1359,7 @@ void Manager::create_data_buffers() {
 
         auto staging = create_buffer(buf_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
 
-        void* data;
-        VK_CHECK(vmaMapMemory(gpu_alloc, staging.second, &data));
-        std::memcpy(data, vertices.data(), (size_t)buf_size);
-        vmaUnmapMemory(gpu_alloc, staging.second);
+        write_gpu(staging.second, indices.data(), (size_t)buf_size);
 
         index_buffer = create_buffer(
             buf_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
@@ -1633,6 +1624,14 @@ void Manager::transition_image(VkImage image, VkFormat format, VkImageLayout old
     run_wait_free_buf(cmds);
 }
 
+void Manager::write_gpu(VmaAllocation alloc, const void* data, size_t size) {
+
+    void* map;
+    VK_CHECK(vmaMapMemory(gpu_alloc, alloc, &map));
+    std::memcpy(map, data, size);
+    vmaUnmapMemory(gpu_alloc, alloc);
+}
+
 void Manager::create_texture() {
 
     Image img = Image::load("numbat.jpg").value();
@@ -1644,10 +1643,7 @@ void Manager::create_texture() {
     auto staging =
         create_buffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
 
-    void* data;
-    VK_CHECK(vmaMapMemory(gpu_alloc, staging.second, &data));
-    std::memcpy(data, img.data(), size);
-    vmaUnmapMemory(gpu_alloc, staging.second);
+    write_gpu(staging.second, img.data(), size);
 
     texture = create_image(img.w(), img.h(), VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
                            VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,

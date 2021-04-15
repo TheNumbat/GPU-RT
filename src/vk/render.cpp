@@ -58,8 +58,14 @@ void Mesh::recreate(std::vector<Mesh::Vertex>&& vertices, std::vector<Mesh::Inde
     _verts = std::move(vertices);
     _idxs = std::move(indices);
     dirty = true;
-    vbuf->recreate(_verts.size() * sizeof(Vertex), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
-    ibuf->recreate(_idxs.size() * sizeof(Index), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT , VMA_MEMORY_USAGE_GPU_ONLY);
+    vbuf->recreate(_verts.size() * sizeof(Vertex),
+                   VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+                       VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                   VMA_MEMORY_USAGE_GPU_ONLY);
+    ibuf->recreate(_idxs.size() * sizeof(Index),
+                   VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
+                       VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                   VMA_MEMORY_USAGE_GPU_ONLY);
 }
 
 void Mesh::sync() const {
@@ -135,7 +141,8 @@ void Pipeline::update_uniforms(const Camera& cam) {
     float time = (current - start) / 1000.0f;
 
     Uniforms ubo;
-    ubo.M = Mat4::rotate(time * 90.0f, {0.0f, 0.0f, 1.0f}) * Mat4::rotate(90.0f, {1.0f, 0.0f, 0.0f});
+    ubo.M =
+        Mat4::rotate(time * 90.0f, {0.0f, 0.0f, 1.0f}) * Mat4::rotate(90.0f, {1.0f, 0.0f, 0.0f});
     ubo.V = cam.get_view();
     ubo.P = cam.get_proj();
 

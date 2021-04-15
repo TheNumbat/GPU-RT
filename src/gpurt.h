@@ -23,16 +23,19 @@ private:
     void UIsidebar();
     void load_scene(bool clear);
     void edit_material(Material& opt);
+    void build_accel();
 
     static inline const char* scene_file_types = "dae,obj,fbx,glb,gltf,3ds,blend,stl,ply";
     static inline const char* image_file_types = "exr,hdr,hdri,jpg,jpeg,png,tga,bmp,psd,gif";
 
     unsigned int selected_id = 0;
-    
+
     enum class Camera_Control { none, orbit, move };
     Camera_Control cam_mode = Camera_Control::none;
     Camera cam;
 
     Window& window;
     Scene scene;
+    std::vector<VK::Accel::Instance> BLAS;
+    VK::Ref<VK::Accel> TLAS;
 };

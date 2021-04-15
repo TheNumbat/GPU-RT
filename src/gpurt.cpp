@@ -6,26 +6,39 @@
 GPURT::GPURT(Window& window, std::string scene_file) : window(window), cam(window.drawable()) {
 
     scene.load(Scene::Load_Opts(), scene_file, cam);
+
+    TLAS = VK::make<VK::Accel>();
+    build_accel();
 }
 
 GPURT::~GPURT() {
 }
 
 void GPURT::render() {
-    
+
     VK::Manager& vk = VK::get();
 
     vk.pipeline->update_uniforms(cam);
 
     VkCommandBuffer cmds = vk.begin_secondary();
 
-    scene.for_objs([&](const Object& obj) {
-        obj.mesh().render(*vk.pipeline, cmds);
-    });
+    scene.for_objs([&](const Object& obj) { obj.mesh().render(*vk.pipeline, cmds); });
 }
 
 void GPURT::render_ui() {
     UIsidebar();
+}
+
+void GPURT::build_accel() {
+
+    BLAS.clear();
+    scene.for_objs([this](const Object& obj) {
+        auto as = VK::make<VK::Accel>();
+        as->recreate(obj.mesh());
+        BLAS.push_back({std::move(as), obj.pose.transform()});
+    });
+
+    TLAS->recreate(BLAS);
 }
 
 void GPURT::load_scene(bool clear) {
@@ -43,6 +56,7 @@ void GPURT::load_scene(bool clear) {
 
     scene.load(load_opt, std::string(path), cam);
     free(path);
+    build_accel();
 }
 
 void GPURT::UIsidebar() {

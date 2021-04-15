@@ -38,6 +38,8 @@ private:
     std::vector<Index> _idxs;
     mutable Ref<Buffer> vbuf, ibuf;
     mutable bool dirty = false;
+
+    friend struct Accel;
 };
 
 struct Uniforms {

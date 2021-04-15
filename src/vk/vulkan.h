@@ -2,10 +2,10 @@
 #pragma once
 
 #include <array>
-#include <vector>
-#include <variant>
-#include <unordered_map>
 #include <mutex>
+#include <unordered_map>
+#include <variant>
+#include <vector>
 
 #include <SDL2/SDL.h>
 #include <lib/mathlib.h>
@@ -17,6 +17,7 @@
     do {                                                                                           \
         VkResult res = (f);                                                                        \
         if(res != VK_SUCCESS) {                                                                    \
+            DEBUG_BREAK;                                                                           \
             die("VK_CHECK: %s", vk_err_str(res).c_str());                                          \
         }                                                                                          \
     } while(0)
@@ -51,11 +52,12 @@ struct Buffer {
     void recreate(VkDeviceSize size, VkBufferUsageFlags buf_usage, VmaMemoryUsage mem_usage);
     void destroy();
 
+    VkDeviceAddress address() const;
     void copy_to(const Buffer& dst);
     void to_image(const Image& image);
     void write(const void* data, size_t size);
     void write_staged(const void* data, size_t dsize);
-    
+
     VkBuffer buf = VK_NULL_HANDLE;
 
 private:
@@ -82,7 +84,7 @@ struct Image {
     void destroy();
 
     void transition(VkImageLayout new_l);
-    
+
     VkImage img = VK_NULL_HANDLE;
 
 private:
@@ -176,9 +178,8 @@ struct Framebuffer {
     VkFramebuffer buf = VK_NULL_HANDLE;
 };
 
-template<typename T>
-struct Ref {
-    
+template<typename T> struct Ref {
+
     Ref() = default;
     ~Ref();
 
@@ -197,9 +198,44 @@ struct Ref {
     const T* operator->() const;
 
 private:
-    Ref(unsigned int i) : id(i) {}
+    Ref(unsigned int i) : id(i) {
+    }
     unsigned int id = 0;
     friend class Manager;
+};
+
+struct Accel {
+
+    struct Instance {
+        Ref<Accel> blas;
+        Mat4 model;
+    };
+
+    Accel() = default;
+    Accel(const Mesh& mesh);
+    Accel(const std::vector<Instance>& blas);
+    ~Accel();
+
+    Accel(const Accel&) = delete;
+    Accel(Accel&& src);
+    Accel& operator=(const Accel&) = delete;
+    Accel& operator=(Accel&& src);
+
+    void recreate(const Mesh& mesh);
+    void recreate(const std::vector<Instance>& blas);
+    void destroy();
+
+    VkAccelerationStructureKHR accel = {};
+
+private:
+    void create_and_build(VkAccelerationStructureCreateInfoKHR create_info,
+                          VkAccelerationStructureBuildGeometryInfoKHR build_info,
+                          VkAccelerationStructureBuildRangeInfoKHR offset);
+
+    Buffer abuf;
+    Buffer ibuf;
+    VkBuildAccelerationStructureFlagsKHR flags = {};
+    VkAccelerationStructureBuildSizesInfoKHR size = {};
 };
 
 class Manager {
@@ -219,10 +255,13 @@ public:
 private:
     struct GPU {
         VkPhysicalDevice device = {};
-        VkPhysicalDeviceFeatures features = {};
+        VkPhysicalDeviceFeatures2 features = {};
+        VkPhysicalDeviceBufferDeviceAddressFeatures addr_features = {};
         VkSurfaceCapabilitiesKHR surf_caps = {};
         VkPhysicalDeviceProperties dev_prop = {};
         VkPhysicalDeviceMemoryProperties mem_prop = {};
+        VkPhysicalDeviceProperties2KHR prop_2 = {};
+        VkPhysicalDeviceRayTracingPipelinePropertiesKHR rt_prop = {};
 
         std::vector<VkPresentModeKHR> modes;
         std::vector<VkSurfaceFormatKHR> fmts;
@@ -238,6 +277,13 @@ private:
         std::vector<VkExtensionProperties> extensions;
         std::vector<const char*> inst_ext, dev_ext, layers;
         VkDebugUtilsMessengerEXT debug_callback_info = {};
+
+        PFN_vkGetPhysicalDeviceProperties2KHR vkGetPhysicalDeviceProperties2;
+        PFN_vkCreateAccelerationStructureKHR vkCreateAccelerationStructureKHR;
+        PFN_vkDestroyAccelerationStructureKHR vkDestroyAccelerationStructureKHR;
+        PFN_vkGetAccelerationStructureBuildSizesKHR vkGetAccelerationStructureBuildSizesKHR;
+        PFN_vkCmdBuildAccelerationStructuresKHR vkCmdBuildAccelerationStructuresKHR;
+        PFN_vkGetAccelerationStructureDeviceAddressKHR vkGetAccelerationStructureDeviceAddressKHR;
     };
 
     struct Swapchain_Slot {
@@ -302,6 +348,7 @@ private:
 
     void init_debug_callback();
     void destroy_debug_callback();
+    void init_rt();
 
     void create_frames();
     void create_gpu_alloc();
@@ -326,21 +373,21 @@ private:
                                      VkFormatFeatureFlags features);
 
     friend Manager& get();
-    
+
     friend struct Buffer;
     friend struct Image;
     friend struct ImageView;
     friend struct Shader;
     friend struct Framebuffer;
     friend struct Sampler;
+    friend struct Accel;
 
-    template<typename T>
-    friend struct Ref;
-    
+    template<typename T> friend struct Ref;
+
     friend struct Pipeline;
     friend struct Mesh;
 
-    using Resource = std::variant<Buffer,Image,ImageView,Shader,Framebuffer,Sampler>;
+    using Resource = std::variant<Buffer, Image, ImageView, Shader, Framebuffer, Sampler, Accel>;
     std::unordered_map<unsigned int, Resource> resources;
     std::unordered_map<unsigned int, Resource> erased_during[Frame::MAX_IN_FLIGHT];
     unsigned int next_id;
@@ -353,44 +400,36 @@ private:
         resources.erase(id);
     }
 
-    template<typename T>
-    T& get(unsigned int id) {
+    template<typename T> T& get(unsigned int id) {
         assert(resources.count(id));
         return std::get<T>(resources.find(id)->second);
     }
-    template<typename T>
-    const T& get(unsigned int id) const {
+    template<typename T> const T& get(unsigned int id) const {
         assert(resources.count(id));
         return std::get<T>(resources.find(id)->second);
     }
 
-    template<typename T>
-    Ref<T> make() {
+    template<typename T> Ref<T> make() {
         std::lock_guard<std::mutex> guard(resource_mut);
         unsigned int id = next_id++;
         resources.insert({id, T()}).first->second;
         return {id};
     }
 
-    template<typename T>
-    friend Ref<T> make();
+    template<typename T> friend Ref<T> make();
 };
 
-template<typename T>
-Ref<T> make() {
+template<typename T> Ref<T> make() {
     return get().make<T>();
 }
 
-template<typename T>
-Ref<T>::~Ref() {
+template<typename T> Ref<T>::~Ref() {
     if(id) get().drop(id);
 }
-template<typename T>
-T* Ref<T>::operator->() {
+template<typename T> T* Ref<T>::operator->() {
     return &get().get<T>(id);
 }
-template<typename T>
-const T* Ref<T>::operator->() const {
+template<typename T> const T* Ref<T>::operator->() const {
     return &get().get<T>(id);
 }
 

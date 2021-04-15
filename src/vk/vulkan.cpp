@@ -8,8 +8,9 @@
 #include <util/image.h>
 
 #define VMA_IMPLEMENTATION
-#include "render.h"
 #include "vk_mem_alloc.h"
+
+#include "render.h"
 
 namespace VK {
 
@@ -145,6 +146,13 @@ void Buffer::recreate(VkDeviceSize sz, VkBufferUsageFlags busage, VmaMemoryUsage
     VK_CHECK(vmaCreateBuffer(get().gpu_alloc, &buf_info, &alloc_info, &buf, &mem, nullptr));
 }
 
+VkDeviceAddress Buffer::address() const {
+    VkBufferDeviceAddressInfo info = {};
+    info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+    info.buffer = buf;
+    return vkGetBufferDeviceAddress(get().gpu.device, &info);
+}
+
 void Buffer::copy_to(const Buffer& dst) {
 
     VkCommandBuffer cmds = get().begin_one_time();
@@ -188,7 +196,7 @@ void Buffer::write(const void* data, size_t dsize) {
 }
 
 void Buffer::write_staged(const void* data, size_t dsize) {
-    
+
     assert(dsize <= size);
 
     Buffer staging(dsize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
@@ -498,7 +506,206 @@ void Framebuffer::destroy() {
     std::memset(this, 0, sizeof(Framebuffer));
 }
 
-Manager::Manager(unsigned int first_id) : next_id(first_id) {}
+Accel::Accel(const Mesh& mesh) {
+    recreate(mesh);
+}
+
+Accel::Accel(const std::vector<Accel::Instance>& blas) {
+    recreate(blas);
+}
+
+Accel::~Accel() {
+    destroy();
+}
+
+Accel::Accel(Accel&& src) {
+    *this = std::move(src);
+}
+
+Accel& Accel::operator=(Accel&& src) {
+    destroy();
+    abuf = std::move(src.abuf);
+    ibuf = std::move(src.ibuf);
+    flags = src.flags;
+    accel = src.accel;
+    size = src.size;
+    std::memset(&src, 0, sizeof(Accel));
+    return *this;
+}
+
+void Accel::destroy() {
+    if(accel) get().info.vkDestroyAccelerationStructureKHR(get().gpu.device, accel, nullptr);
+    abuf.destroy();
+    ibuf.destroy();
+    flags = {};
+    size = {};
+    accel = {};
+}
+
+void Accel::recreate(const std::vector<Accel::Instance>& blas) {
+
+    destroy();
+    flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+
+    std::vector<VkAccelerationStructureInstanceKHR> instances;
+    instances.reserve(blas.size());
+
+    for(size_t i = 0; i < blas.size(); i++) {
+
+        const Accel::Instance& inst = blas[i];
+
+        VkAccelerationStructureDeviceAddressInfoKHR addr = {};
+        addr.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
+        addr.accelerationStructure = inst.blas->accel;
+
+        VkDeviceAddress blasAddress =
+            get().info.vkGetAccelerationStructureDeviceAddressKHR(get().gpu.device, &addr);
+
+        VkAccelerationStructureInstanceKHR as_inst = {};
+        Mat4 T = inst.model.T();
+        std::memcpy(&as_inst.transform, &T, sizeof(as_inst.transform));
+
+        as_inst.instanceCustomIndex = i;
+        as_inst.accelerationStructureReference = blasAddress;
+        as_inst.instanceShaderBindingTableRecordOffset = 0;
+        as_inst.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+
+        instances.push_back(as_inst);
+    }
+
+    VkDeviceSize instances_size = instances.size() * sizeof(VkAccelerationStructureInstanceKHR);
+
+    ibuf.recreate(instances_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                  VMA_MEMORY_USAGE_GPU_ONLY);
+    ibuf.write_staged(instances.data(), instances_size);
+
+    VkDeviceAddress instanceAddress = ibuf.address();
+
+    VkAccelerationStructureGeometryInstancesDataKHR instancesVk = {};
+    instancesVk.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
+    instancesVk.arrayOfPointers = VK_FALSE;
+    instancesVk.data.deviceAddress = instanceAddress;
+
+    VkAccelerationStructureGeometryKHR topASGeometry = {};
+    topASGeometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+    topASGeometry.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
+    topASGeometry.geometry.instances = instancesVk;
+
+    VkAccelerationStructureBuildGeometryInfoKHR build_info = {};
+    build_info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+    build_info.flags = flags;
+    build_info.geometryCount = 1;
+    build_info.pGeometries = &topASGeometry;
+    build_info.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+    build_info.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+    build_info.srcAccelerationStructure = VK_NULL_HANDLE;
+
+    unsigned int count = (unsigned int)instances.size();
+    size.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
+
+    get().info.vkGetAccelerationStructureBuildSizesKHR(
+        get().gpu.device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &build_info, &count,
+        &size);
+
+    abuf.recreate(size.accelerationStructureSize,
+                  VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR |
+                      VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                  VMA_MEMORY_USAGE_GPU_ONLY);
+
+    VkAccelerationStructureCreateInfoKHR create_info = {};
+    create_info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+    create_info.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+    create_info.size = size.accelerationStructureSize;
+
+    VkAccelerationStructureBuildRangeInfoKHR offset = {};
+    offset.primitiveCount = (unsigned int)instances.size();
+
+    create_and_build(create_info, build_info, offset);
+}
+
+void Accel::create_and_build(VkAccelerationStructureCreateInfoKHR create_info,
+                             VkAccelerationStructureBuildGeometryInfoKHR build_info,
+                             VkAccelerationStructureBuildRangeInfoKHR offset) {
+
+    create_info.buffer = abuf.buf;
+
+    VK_CHECK(get().info.vkCreateAccelerationStructureKHR(get().gpu.device, &create_info, nullptr,
+                                                         &accel));
+
+    Buffer scratch(size.buildScratchSize,
+                   VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                   VMA_MEMORY_USAGE_GPU_ONLY);
+
+    build_info.scratchData.deviceAddress = scratch.address();
+    build_info.dstAccelerationStructure = accel;
+
+    VkAccelerationStructureBuildRangeInfoKHR* offsets[] = {&offset};
+
+    VkCommandBuffer cmds = get().begin_one_time();
+    get().info.vkCmdBuildAccelerationStructuresKHR(cmds, 1, &build_info, offsets);
+    get().end_one_time(cmds);
+}
+
+void Accel::recreate(const Mesh& mesh) {
+
+    destroy();
+    flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+
+    mesh.sync();
+    VkDeviceAddress v_addr = mesh.vbuf->address();
+    VkDeviceAddress i_addr = mesh.ibuf->address();
+
+    uint32_t maxPrimitiveCount = mesh._idxs.size() / 3;
+
+    VkAccelerationStructureGeometryTrianglesDataKHR triangles = {};
+    triangles.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+    triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
+    triangles.vertexData.deviceAddress = v_addr;
+    triangles.vertexStride = sizeof(Mesh::Vertex);
+    triangles.indexType = VK_INDEX_TYPE_UINT32;
+    triangles.indexData.deviceAddress = i_addr;
+    triangles.maxVertex = mesh._verts.size();
+    triangles.transformData = {};
+
+    VkAccelerationStructureGeometryKHR geom = {};
+    geom.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+    geom.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+    geom.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
+    geom.geometry.triangles = triangles;
+
+    VkAccelerationStructureBuildRangeInfoKHR offset = {};
+    offset.primitiveCount = maxPrimitiveCount;
+
+    VkAccelerationStructureBuildGeometryInfoKHR build_info = {};
+    build_info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+    build_info.flags = flags;
+    build_info.geometryCount = 1;
+    build_info.pGeometries = &geom;
+    build_info.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+    build_info.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+    build_info.srcAccelerationStructure = VK_NULL_HANDLE;
+
+    size.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
+
+    get().info.vkGetAccelerationStructureBuildSizesKHR(
+        get().gpu.device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &build_info,
+        &maxPrimitiveCount, &size);
+
+    abuf.recreate(size.accelerationStructureSize,
+                  VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR |
+                      VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                  VMA_MEMORY_USAGE_GPU_ONLY);
+
+    VkAccelerationStructureCreateInfoKHR create_info = {};
+    create_info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+    create_info.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+    create_info.size = size.accelerationStructureSize;
+
+    create_and_build(create_info, build_info, offset);
+}
+
+Manager::Manager(unsigned int first_id) : next_id(first_id) {
+}
 
 void Manager::begin_frame() {
 
@@ -639,7 +846,7 @@ void Manager::end_frame() {
 }
 
 VkCommandBuffer Manager::render_imgui() {
-    
+
     ImGui::Render();
     VkCommandBuffer cmds = begin_secondary();
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmds);
@@ -727,6 +934,7 @@ void Manager::init(SDL_Window* sdl_window) {
 
     create_instance();
     init_debug_callback();
+    init_rt();
 
     enumerate_gpus();
     select_gpu();
@@ -756,6 +964,7 @@ void Manager::create_gpu_alloc() {
     alloc_info.physicalDevice = gpu.data->device;
     alloc_info.device = gpu.device;
     alloc_info.instance = info.instance;
+    alloc_info.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
 
     VK_CHECK(vmaCreateAllocator(&alloc_info, &gpu_alloc));
 }
@@ -916,6 +1125,50 @@ static VkBool32 debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT sev,
     return is_error;
 }
 
+void Manager::init_rt() {
+
+    info.vkGetPhysicalDeviceProperties2 =
+        (PFN_vkGetPhysicalDeviceProperties2KHR)vkGetInstanceProcAddr(
+            info.instance, "vkGetPhysicalDeviceProperties2");
+
+    if(!info.vkGetPhysicalDeviceProperties2) die("Failed to load vkGetPhysicalDeviceProperties2");
+
+    info.vkCreateAccelerationStructureKHR =
+        (PFN_vkCreateAccelerationStructureKHR)vkGetInstanceProcAddr(
+            info.instance, "vkCreateAccelerationStructureKHR");
+
+    if(!info.vkCreateAccelerationStructureKHR)
+        die("Failed to load vkCreateAccelerationStructureKHR");
+
+    info.vkDestroyAccelerationStructureKHR =
+        (PFN_vkDestroyAccelerationStructureKHR)vkGetInstanceProcAddr(
+            info.instance, "vkDestroyAccelerationStructureKHR");
+
+    if(!info.vkDestroyAccelerationStructureKHR)
+        die("Failed to load vkDestroyAccelerationStructureKHR");
+
+    info.vkGetAccelerationStructureBuildSizesKHR =
+        (PFN_vkGetAccelerationStructureBuildSizesKHR)vkGetInstanceProcAddr(
+            info.instance, "vkGetAccelerationStructureBuildSizesKHR");
+
+    if(!info.vkGetAccelerationStructureBuildSizesKHR)
+        die("Failed to load vkGetAccelerationStructureBuildSizesKHR");
+
+    info.vkCmdBuildAccelerationStructuresKHR =
+        (PFN_vkCmdBuildAccelerationStructuresKHR)vkGetInstanceProcAddr(
+            info.instance, "vkCmdBuildAccelerationStructuresKHR");
+
+    if(!info.vkCmdBuildAccelerationStructuresKHR)
+        die("Failed to load vkCmdBuildAccelerationStructuresKHR");
+
+    info.vkGetAccelerationStructureDeviceAddressKHR =
+        (PFN_vkGetAccelerationStructureDeviceAddressKHR)vkGetInstanceProcAddr(
+            info.instance, "vkGetAccelerationStructureDeviceAddressKHR");
+
+    if(!info.vkGetAccelerationStructureDeviceAddressKHR)
+        die("Failed to load vkGetAccelerationStructureDeviceAddressKHR");
+}
+
 void Manager::init_debug_callback() {
 
     VkDebugUtilsMessengerCreateInfoEXT callback = {};
@@ -975,14 +1228,13 @@ void Manager::create_instance() {
     info.inst_ext.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     info.dev_ext.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
-    info.dev_ext.push_back("VK_KHR_shader_float_controls");
-    info.dev_ext.push_back("VK_KHR_spirv_1_4");
-    info.dev_ext.push_back("VK_EXT_descriptor_indexing");
-    info.dev_ext.push_back("VK_KHR_buffer_device_address");
-    info.dev_ext.push_back("VK_KHR_deferred_host_operations");
-    info.dev_ext.push_back("VK_KHR_acceleration_structure");
-    info.dev_ext.push_back("VK_KHR_ray_tracing_pipeline");
-    info.dev_ext.push_back("VK_KHR_ray_query");
+    info.dev_ext.push_back(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
+    info.dev_ext.push_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+    info.dev_ext.push_back(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
+    info.dev_ext.push_back(VK_KHR_MAINTENANCE3_EXTENSION_NAME);
+    info.dev_ext.push_back(VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME);
+    info.dev_ext.push_back(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
+    info.dev_ext.push_back(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
 
     unsigned int sdl_count = 0;
     if(!SDL_Vulkan_GetInstanceExtensions(window, &sdl_count, nullptr)) {
@@ -1081,8 +1333,20 @@ void Manager::enumerate_gpus() {
                                                                &num_modes, g.modes.data()));
         }
         {
+            g.prop_2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+            g.prop_2.pNext = &g.rt_prop;
+            g.rt_prop.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
+            info.vkGetPhysicalDeviceProperties2(g.device, &g.prop_2);
+        }
+        {
+            g.features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+            g.features.pNext = &g.addr_features;
+            g.addr_features.sType =
+                VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
+            vkGetPhysicalDeviceFeatures2(g.device, &g.features);
+        }
+        {
             vkGetPhysicalDeviceMemoryProperties(g.device, &g.mem_prop);
-            vkGetPhysicalDeviceFeatures(g.device, &g.features);
             vkGetPhysicalDeviceProperties(g.device, &g.dev_prop);
         }
     }
@@ -1112,8 +1376,13 @@ void Manager::select_gpu() {
         g.graphics_idx = -1;
         g.present_idx = -1;
 
-        if(!g.features.samplerAnisotropy) {
+        if(!g.features.features.samplerAnisotropy) {
             info("Device % does not support anisotropic sampling.", name);
+            continue;
+        }
+
+        if(!g.addr_features.bufferDeviceAddress) {
+            info("Device % does not support device buffer addresses.", name);
             continue;
         }
 
@@ -1188,15 +1457,38 @@ void Manager::create_logical_device_and_queues() {
         q_info.push_back(qinfo);
     }
 
-    // TODO(max): figure out what device features we need to enable
-    VkPhysicalDeviceFeatures features = {};
-    features.samplerAnisotropy = VK_TRUE;
+    VkPhysicalDeviceBufferDeviceAddressFeatures buf_features = {};
+    buf_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
+    buf_features.bufferDeviceAddress = VK_TRUE;
+
+    VkPhysicalDeviceRayQueryFeaturesKHR ray_features = {};
+    ray_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
+    ray_features.rayQuery = VK_TRUE;
+    ray_features.pNext = &buf_features;
+
+    VkPhysicalDeviceRayTracingPipelineFeaturesKHR rp_features = {};
+    rp_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+    rp_features.rayTracingPipeline = VK_TRUE;
+    rp_features.rayTracingPipelineTraceRaysIndirect = VK_TRUE;
+    rp_features.rayTraversalPrimitiveCulling = VK_TRUE;
+    rp_features.pNext = &ray_features;
+
+    VkPhysicalDeviceAccelerationStructureFeaturesKHR ac_features = {};
+    ac_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+    ac_features.accelerationStructure = VK_TRUE;
+    ac_features.pNext = &rp_features;
+
+    VkPhysicalDeviceFeatures2 features2 = {};
+    features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    features2.features.samplerAnisotropy = VK_TRUE;
+    features2.pNext = &ac_features;
 
     VkDeviceCreateInfo dev_info = {};
     dev_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    dev_info.pNext = &features2;
     dev_info.queueCreateInfoCount = q_info.size();
     dev_info.pQueueCreateInfos = q_info.data();
-    dev_info.pEnabledFeatures = &features;
+    dev_info.pEnabledFeatures = nullptr;
     dev_info.enabledExtensionCount = info.dev_ext.size();
     dev_info.ppEnabledExtensionNames = info.dev_ext.data();
     dev_info.enabledLayerCount = info.layers.size();

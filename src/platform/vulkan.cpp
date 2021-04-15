@@ -58,7 +58,7 @@ std::array<VkVertexInputAttributeDescription, 3> Vertex::attr_descs() {
     do {                                                                                           \
         VkResult res = (f);                                                                        \
         if(res != VK_SUCCESS) {                                                                    \
-            die("VK_CHECK: %", vk_err_str(res));                                                   \
+            die("VK_CHECK: %s", vk_err_str(res).c_str());                                          \
         }                                                                                          \
     } while(0)
 
@@ -158,7 +158,7 @@ void Manager::begin_frame() {
         recreate_swapchain();
         return;
     } else if(result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-        die("Failed to acquire next image: %", vk_err_str(result));
+        die("Failed to acquire next image: %s", vk_err_str(result).c_str());
     }
 
     if(image.frame_fence != VK_NULL_HANDLE) {
@@ -200,7 +200,7 @@ void Manager::submit_frame(std::vector<VkCommandBuffer>&& buffers) {
     pass_info.renderArea.extent = swapchain.extent;
 
     VkClearValue clears[2] = {};
-    clears[0].color = {0.0f, 0.0f, 0.0f, 1.0f};
+    clears[0].color = {0.22f, 0.22f, 0.22f, 1.0f};
     clears[1].depthStencil = {0.0f, 0};
     pass_info.clearValueCount = 2;
     pass_info.pClearValues = clears;
@@ -294,7 +294,7 @@ void Manager::end_frame() {
     if(result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || needs_resize) {
         recreate_swapchain();
     } else if(result != VK_SUCCESS) {
-        die("Failed to present swapchain image: %", vk_err_str(result));
+        die("Failed to present swapchain image: %s", vk_err_str(result).c_str());
     }
 
     current_frame = (current_frame + 1) % Frame::MAX_IN_FLIGHT;
@@ -721,12 +721,12 @@ void Manager::create_instance() {
             create_info.ppEnabledLayerNames = nullptr;
             VK_CHECK(vkCreateInstance(&create_info, nullptr, &info.instance));
         } else {
-            die("Failed to create VkInstance: %", vk_err_str(inst));
+            die("Failed to create VkInstance: %s", vk_err_str(inst).c_str());
         }
     }
 
     if(!SDL_Vulkan_CreateSurface(window, info.instance, &swapchain.surface)) {
-        die("Failed to create SDL VkSurface: %", SDL_GetError());
+        die("Failed to create SDL VkSurface: %s", SDL_GetError());
     }
 
     unsigned int total_extensions = 0;

@@ -13,6 +13,12 @@
 
 #include "vk_mem_alloc.h"
 
+// porting to exile2
+//      swap back to custom lib
+//      add quat/camera to lib
+//      literals instead of strings
+//      single % in logging
+
 #define VK_CHECK(f)                                                                                \
     do {                                                                                           \
         VkResult res = (f);                                                                        \
@@ -32,11 +38,12 @@ struct ImageView;
 struct Sampler;
 struct Shader;
 struct Framebuffer;
+struct BLAS;
 
 struct Pipeline;
 struct Mesh;
 
-Manager& get();
+Manager& vk();
 std::string vk_err_str(VkResult errorCode);
 
 struct Buffer {
@@ -178,42 +185,29 @@ struct Framebuffer {
     VkFramebuffer buf = VK_NULL_HANDLE;
 };
 
-template<typename T> struct Ref {
+template<typename T> struct Drop {
 
-    Ref() = default;
-    ~Ref();
+    Drop() = default;
+    ~Drop();
 
-    Ref(const Ref&) = delete;
-    Ref(Ref&& src) {
-        *this = std::move(src);
-    }
-    Ref& operator=(const Ref&) = delete;
-    Ref& operator=(Ref&& src) {
-        id = src.id;
-        src.id = 0;
-        return *this;
-    }
+    Drop(const Drop&) = delete;
+    Drop(Drop&& src) = default;
+    Drop& operator=(const Drop&) = delete;
+    Drop& operator=(Drop&& src) = default;
 
-    T* operator->();
-    const T* operator->() const;
+    T* operator->() { return &resource; }
+    const T* operator->() const { return &resource; }
 
 private:
-    Ref(unsigned int i) : id(i) {
-    }
-    unsigned int id = 0;
+    T resource;
     friend class Manager;
 };
 
 struct Accel {
 
-    struct Instance {
-        Ref<Accel> blas;
-        Mat4 model;
-    };
-
     Accel() = default;
     Accel(const Mesh& mesh);
-    Accel(const std::vector<Instance>& blas);
+    Accel(const std::vector<Accel>& blas, const std::vector<Mat4>& inst);
     ~Accel();
 
     Accel(const Accel&) = delete;
@@ -222,7 +216,7 @@ struct Accel {
     Accel& operator=(Accel&& src);
 
     void recreate(const Mesh& mesh);
-    void recreate(const std::vector<Instance>& blas);
+    void recreate(const std::vector<Accel>& blas, const std::vector<Mat4>& inst);
     void destroy();
 
     VkAccelerationStructureKHR accel = {};
@@ -240,8 +234,6 @@ private:
 
 class Manager {
 public:
-    ~Manager() = default;
-
     void init(SDL_Window* window);
     void destroy();
     void begin_frame();
@@ -249,10 +241,20 @@ public:
     void trigger_resize();
 
     VkCommandBuffer begin_secondary();
+    unsigned int frame() const;
 
     Pipeline* pipeline = nullptr;
 
+    template<typename T> 
+    void drop(T&& resource) {
+        std::lock_guard<std::mutex> lock(erase_mut[current_frame]);
+        erase_queue[current_frame].push_back({std::move(resource)});
+    }
+
 private:
+    Manager() = default;
+    ~Manager() = default;
+
     struct GPU {
         VkPhysicalDevice device = {};
         VkPhysicalDeviceFeatures2 features = {};
@@ -322,8 +324,6 @@ private:
         VkQueue graphics_queue = {}, present_queue = {};
     };
 
-    Manager(unsigned int first_id = 1);
-
     Info info;
     Frames frames;
     Swapchain swapchain;
@@ -372,8 +372,6 @@ private:
     VkFormat choose_supported_format(const std::vector<VkFormat>& formats, VkImageTiling tiling,
                                      VkFormatFeatureFlags features);
 
-    friend Manager& get();
-
     friend struct Buffer;
     friend struct Image;
     friend struct ImageView;
@@ -381,56 +379,26 @@ private:
     friend struct Framebuffer;
     friend struct Sampler;
     friend struct Accel;
+    template<typename T> friend struct Drop;
 
-    template<typename T> friend struct Ref;
-
+    // todo remove
     friend struct Pipeline;
-    friend struct Mesh;
 
     using Resource = std::variant<Buffer, Image, ImageView, Shader, Framebuffer, Sampler, Accel>;
-    std::unordered_map<unsigned int, Resource> resources;
-    std::unordered_map<unsigned int, Resource> erased_during[Frame::MAX_IN_FLIGHT];
-    unsigned int next_id;
-    std::mutex resource_mut;
+    std::vector<Resource> erase_queue[Frame::MAX_IN_FLIGHT];
+    std::mutex erase_mut[Frame::MAX_IN_FLIGHT];
 
-    void drop(unsigned int id) {
-        assert(resources.count(id));
-        std::lock_guard<std::mutex> guard(resource_mut);
-        erased_during[current_frame].insert({id, std::move(resources[id])});
-        resources.erase(id);
+    void do_erase() {
+        std::lock_guard<std::mutex> lock(erase_mut[current_frame]);
+        erase_queue[current_frame].clear();
     }
 
-    template<typename T> T& get(unsigned int id) {
-        assert(resources.count(id));
-        return std::get<T>(resources.find(id)->second);
-    }
-    template<typename T> const T& get(unsigned int id) const {
-        assert(resources.count(id));
-        return std::get<T>(resources.find(id)->second);
-    }
-
-    template<typename T> Ref<T> make() {
-        std::lock_guard<std::mutex> guard(resource_mut);
-        unsigned int id = next_id++;
-        resources.insert({id, T()}).first->second;
-        return {id};
-    }
-
-    template<typename T> friend Ref<T> make();
+    friend Manager& vk();
 };
 
-template<typename T> Ref<T> make() {
-    return get().make<T>();
-}
-
-template<typename T> Ref<T>::~Ref() {
-    if(id) get().drop(id);
-}
-template<typename T> T* Ref<T>::operator->() {
-    return &get().get<T>(id);
-}
-template<typename T> const T* Ref<T>::operator->() const {
-    return &get().get<T>(id);
+template<typename T>
+Drop<T>::~Drop() {
+    vk().drop(std::move(resource));
 }
 
 } // namespace VK

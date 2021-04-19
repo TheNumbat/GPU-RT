@@ -46,7 +46,7 @@ void Window::init() {
     ImGui_ImplSDL2_InitForVulkan(window);
 
     set_dpi();
-    VK::get().init(window);
+    VK::vk().init(window);
     ImGui::StyleColorsDark();
 }
 
@@ -97,7 +97,7 @@ bool Window::is_down(SDL_Scancode key) {
 void Window::shutdown() {
 
     ImGui_ImplSDL2_Shutdown();
-    VK::get().destroy();
+    VK::vk().destroy();
 
     ImGui::DestroyContext();
     SDL_DestroyWindow(window);
@@ -106,7 +106,7 @@ void Window::shutdown() {
 }
 
 void Window::complete_frame() {
-    VK::get().end_frame();
+    VK::vk().end_frame();
 }
 
 std::optional<SDL_Event> Window::event() {
@@ -121,7 +121,7 @@ std::optional<SDL_Event> Window::event() {
             if(e.window.event == SDL_WINDOWEVENT_RESIZED ||
                e.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
 
-                VK::get().trigger_resize();
+                VK::vk().trigger_resize();
             }
         } break;
         }
@@ -137,7 +137,7 @@ void Window::begin_frame() {
     IO.DisplayFramebufferScale = scale({1.0f, 1.0f});
 
     ImGui_ImplSDL2_NewFrame(window);
-    VK::get().begin_frame();
+    VK::vk().begin_frame();
     ImGui::NewFrame();
 }
 

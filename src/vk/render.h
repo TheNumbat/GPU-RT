@@ -36,7 +36,7 @@ struct Mesh {
 private:
     std::vector<Vertex> _verts;
     std::vector<Index> _idxs;
-    mutable Ref<Buffer> vbuf, ibuf;
+    mutable Drop<Buffer> vbuf, ibuf;
     mutable bool dirty = false;
 
     friend struct Accel;

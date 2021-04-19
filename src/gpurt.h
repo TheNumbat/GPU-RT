@@ -36,6 +36,7 @@ private:
 
     Window& window;
     Scene scene;
-    std::vector<VK::Accel::Instance> BLAS;
-    VK::Ref<VK::Accel> TLAS;
+    std::vector<VK::Accel> BLAS;
+    std::vector<Mat4> BLAS_T;
+    VK::Accel TLAS;
 };

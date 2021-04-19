@@ -35,8 +35,6 @@ std::array<VkVertexInputAttributeDescription, 3> Mesh::Vertex::attr_descs() {
 }
 
 Mesh::Mesh(std::vector<Mesh::Vertex>&& vertices, std::vector<Mesh::Index>&& indices) {
-    vbuf = VK::make<Buffer>();
-    ibuf = VK::make<Buffer>();
     recreate(std::move(vertices), std::move(indices));
 }
 
@@ -87,7 +85,7 @@ void Mesh::render(const Pipeline& pipe, VkCommandBuffer cmds) const {
     vkCmdBindVertexBuffers(cmds, 0, 1, vertex_buffers, offsets);
     vkCmdBindIndexBuffer(cmds, ibuf->buf, 0, VK_INDEX_TYPE_UINT32);
     vkCmdBindDescriptorSets(cmds, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_layout, 0, 1,
-                            &pipe.descriptor_sets[get().current_frame], 0, nullptr);
+                            &pipe.descriptor_sets[vk().frame()], 0, nullptr);
     vkCmdDrawIndexed(cmds, _idxs.size(), 1, 0, 0, 0);
 }
 
@@ -100,8 +98,8 @@ void Pipeline::init() {
 }
 
 void Pipeline::destroy_swap() {
-    vkDestroyPipeline(get().gpu.device, graphics_pipeline, nullptr);
-    vkDestroyPipelineLayout(get().gpu.device, pipeline_layout, nullptr);
+    vkDestroyPipeline(vk().gpu.device, graphics_pipeline, nullptr);
+    vkDestroyPipelineLayout(vk().gpu.device, pipeline_layout, nullptr);
     pipeline_layout = {};
     graphics_pipeline = {};
     depth_view.destroy();
@@ -110,7 +108,7 @@ void Pipeline::destroy_swap() {
 
 void Pipeline::destroy() {
 
-    vkFreeDescriptorSets(get().gpu.device, get().descriptor_pool, descriptor_sets.size(),
+    vkFreeDescriptorSets(vk().gpu.device, vk().descriptor_pool, descriptor_sets.size(),
                          descriptor_sets.data());
     descriptor_sets.clear();
 
@@ -119,13 +117,13 @@ void Pipeline::destroy() {
     }
     uniform_buffers.clear();
 
-    vkDestroyDescriptorSetLayout(get().gpu.device, descriptor_layout, nullptr);
+    vkDestroyDescriptorSetLayout(vk().gpu.device, descriptor_layout, nullptr);
 }
 
 void Pipeline::create_depth_buf() {
 
-    VkFormat format = get().find_depth_format();
-    auto [w, h] = get().swapchain.dim();
+    VkFormat format = vk().find_depth_format();
+    auto [w, h] = vk().swapchain.dim();
 
     depth_image.recreate(w, h, format, VK_IMAGE_TILING_OPTIMAL,
                          VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
@@ -146,7 +144,7 @@ void Pipeline::update_uniforms(const Camera& cam) {
     ubo.V = cam.get_view();
     ubo.P = cam.get_proj();
 
-    uniform_buffers[get().current_frame].write(&ubo, sizeof(ubo));
+    uniform_buffers[vk().frame()].write(&ubo, sizeof(ubo));
 }
 
 void Pipeline::create_pipeline() {
@@ -184,14 +182,14 @@ void Pipeline::create_pipeline() {
     VkViewport viewport = {};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = (float)get().swapchain.extent.width;
-    viewport.height = (float)get().swapchain.extent.height;
+    viewport.width = (float)vk().swapchain.extent.width;
+    viewport.height = (float)vk().swapchain.extent.height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
 
     VkRect2D scissor = {};
     scissor.offset = {0, 0};
-    scissor.extent = get().swapchain.extent;
+    scissor.extent = vk().swapchain.extent;
 
     VkPipelineViewportStateCreateInfo view_info = {};
     view_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -261,7 +259,7 @@ void Pipeline::create_pipeline() {
     layout_info.pushConstantRangeCount = 0;
     layout_info.pPushConstantRanges = nullptr;
 
-    VK_CHECK(vkCreatePipelineLayout(get().gpu.device, &layout_info, nullptr, &pipeline_layout));
+    VK_CHECK(vkCreatePipelineLayout(vk().gpu.device, &layout_info, nullptr, &pipeline_layout));
 
     VkPipelineDepthStencilStateCreateInfo depth_info = {};
     depth_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -288,12 +286,12 @@ void Pipeline::create_pipeline() {
     pipeline_info.pColorBlendState = &blend_info;
     pipeline_info.pDynamicState = nullptr;
     pipeline_info.layout = pipeline_layout;
-    pipeline_info.renderPass = get().output_pass;
+    pipeline_info.renderPass = vk().output_pass;
     pipeline_info.subpass = 0;
     pipeline_info.basePipelineHandle = nullptr; // Optional
     pipeline_info.basePipelineIndex = -1;       // Optional
 
-    VK_CHECK(vkCreateGraphicsPipelines(get().gpu.device, nullptr, 1, &pipeline_info, nullptr,
+    VK_CHECK(vkCreateGraphicsPipelines(vk().gpu.device, nullptr, 1, &pipeline_info, nullptr,
                                        &graphics_pipeline));
 }
 
@@ -332,7 +330,7 @@ void Pipeline::create_descriptor_set_layout() {
     layout_info.pBindings = bindings;
 
     VK_CHECK(
-        vkCreateDescriptorSetLayout(get().gpu.device, &layout_info, nullptr, &descriptor_layout));
+        vkCreateDescriptorSetLayout(vk().gpu.device, &layout_info, nullptr, &descriptor_layout));
 }
 
 void Pipeline::create_descriptor_sets() {
@@ -341,12 +339,12 @@ void Pipeline::create_descriptor_sets() {
 
     VkDescriptorSetAllocateInfo alloc_info = {};
     alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    alloc_info.descriptorPool = get().descriptor_pool;
+    alloc_info.descriptorPool = vk().descriptor_pool;
     alloc_info.descriptorSetCount = Manager::Frame::MAX_IN_FLIGHT;
     alloc_info.pSetLayouts = layouts.data();
 
     descriptor_sets.resize(Manager::Frame::MAX_IN_FLIGHT);
-    VK_CHECK(vkAllocateDescriptorSets(get().gpu.device, &alloc_info, descriptor_sets.data()));
+    VK_CHECK(vkAllocateDescriptorSets(vk().gpu.device, &alloc_info, descriptor_sets.data()));
 
     for(unsigned int i = 0; i < Manager::Frame::MAX_IN_FLIGHT; i++) {
 
@@ -365,7 +363,7 @@ void Pipeline::create_descriptor_sets() {
         desc_writes[0].descriptorCount = 1;
         desc_writes[0].pBufferInfo = &buf_info;
 
-        vkUpdateDescriptorSets(get().gpu.device, 1, desc_writes, 0, nullptr);
+        vkUpdateDescriptorSets(vk().gpu.device, 1, desc_writes, 0, nullptr);
     }
 }
 

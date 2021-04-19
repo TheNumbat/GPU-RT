@@ -14,15 +14,14 @@
 
 namespace VK {
 
-Manager& get() {
+Manager& vk() {
     static Manager singleton;
     return singleton;
 }
 
 std::string vk_err_str(VkResult errorCode) {
     switch(errorCode) {
-#define STR(r)                                                                                     \
-    case VK_##r: return #r
+#define STR(r) case VK_##r: return #r
         STR(NOT_READY);
         STR(TIMEOUT);
         STR(EVENT_SET);
@@ -53,8 +52,7 @@ std::string vk_err_str(VkResult errorCode) {
 
 static std::string vk_obj_type(VkObjectType type) {
     switch(type) {
-#define STR(r)                                                                                     \
-    case VK_OBJECT_TYPE_##r: return #r
+#define STR(r) case VK_OBJECT_TYPE_##r: return #r
         STR(UNKNOWN);
         STR(INSTANCE);
         STR(PHYSICAL_DEVICE);
@@ -123,7 +121,7 @@ Buffer::Buffer(VkDeviceSize size, VkBufferUsageFlags buf_usage, VmaMemoryUsage m
 }
 
 void Buffer::destroy() {
-    if(buf && mem) vmaDestroyBuffer(get().gpu_alloc, buf, mem);
+    if(buf && mem) vmaDestroyBuffer(vk().gpu_alloc, buf, mem);
     std::memset(this, 0, sizeof(Buffer));
 }
 
@@ -143,19 +141,19 @@ void Buffer::recreate(VkDeviceSize sz, VkBufferUsageFlags busage, VmaMemoryUsage
     VmaAllocationCreateInfo alloc_info = {};
     alloc_info.usage = mem_usage;
 
-    VK_CHECK(vmaCreateBuffer(get().gpu_alloc, &buf_info, &alloc_info, &buf, &mem, nullptr));
+    VK_CHECK(vmaCreateBuffer(vk().gpu_alloc, &buf_info, &alloc_info, &buf, &mem, nullptr));
 }
 
 VkDeviceAddress Buffer::address() const {
     VkBufferDeviceAddressInfo info = {};
     info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
     info.buffer = buf;
-    return vkGetBufferDeviceAddress(get().gpu.device, &info);
+    return vkGetBufferDeviceAddress(vk().gpu.device, &info);
 }
 
 void Buffer::copy_to(const Buffer& dst) {
 
-    VkCommandBuffer cmds = get().begin_one_time();
+    VkCommandBuffer cmds = vk().begin_one_time();
 
     VkBufferCopy region = {};
     region.srcOffset = 0;
@@ -163,12 +161,12 @@ void Buffer::copy_to(const Buffer& dst) {
     region.size = size;
     vkCmdCopyBuffer(cmds, buf, dst.buf, 1, &region);
 
-    get().end_one_time(cmds);
+    vk().end_one_time(cmds);
 }
 
 void Buffer::to_image(const Image& image) {
 
-    VkCommandBuffer cmds = get().begin_one_time();
+    VkCommandBuffer cmds = vk().begin_one_time();
 
     VkBufferImageCopy region = {};
     region.bufferOffset = 0;
@@ -183,16 +181,16 @@ void Buffer::to_image(const Image& image) {
 
     vkCmdCopyBufferToImage(cmds, buf, image.img, image.layout, 1, &region);
 
-    get().end_one_time(cmds);
+    vk().end_one_time(cmds);
 }
 
 void Buffer::write(const void* data, size_t dsize) {
     assert(dsize <= size);
 
     void* map;
-    VK_CHECK(vmaMapMemory(get().gpu_alloc, mem, &map));
+    VK_CHECK(vmaMapMemory(vk().gpu_alloc, mem, &map));
     std::memcpy(map, data, dsize);
-    vmaUnmapMemory(get().gpu_alloc, mem);
+    vmaUnmapMemory(vk().gpu_alloc, mem);
 }
 
 void Buffer::write_staged(const void* data, size_t dsize) {
@@ -220,7 +218,7 @@ Image& Image::operator=(Image&& src) {
 }
 
 void Image::destroy() {
-    if(img && mem) vmaDestroyImage(get().gpu_alloc, img, mem);
+    if(img && mem) vmaDestroyImage(vk().gpu_alloc, img, mem);
     std::memset(this, 0, sizeof(Image));
 }
 
@@ -254,7 +252,7 @@ void Image::recreate(unsigned int width, unsigned int height, VkFormat fmt, VkIm
     VmaAllocationCreateInfo alloc_info = {};
     alloc_info.usage = mem_usage;
 
-    VK_CHECK(vmaCreateImage(get().gpu_alloc, &img_info, &alloc_info, &img, &mem, nullptr));
+    VK_CHECK(vmaCreateImage(vk().gpu_alloc, &img_info, &alloc_info, &img, &mem, nullptr));
 }
 
 void Image::transition(VkImageLayout new_l) {
@@ -262,7 +260,7 @@ void Image::transition(VkImageLayout new_l) {
     VkImageLayout old_l = layout;
     layout = new_l;
 
-    VkCommandBuffer cmds = get().begin_one_time();
+    VkCommandBuffer cmds = vk().begin_one_time();
 
     VkImageMemoryBarrier barrier = {};
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -318,7 +316,7 @@ void Image::transition(VkImageLayout new_l) {
 
     vkCmdPipelineBarrier(cmds, src_stage, dst_stage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
 
-    get().end_one_time(cmds);
+    vk().end_one_time(cmds);
 }
 
 ImageView::ImageView(const Image& image, VkImageAspectFlags aspect) {
@@ -366,11 +364,11 @@ void ImageView::recreate(VkImage img, VkFormat format, VkImageAspectFlags asp) {
     view_info.subresourceRange.baseArrayLayer = 0;
     view_info.subresourceRange.layerCount = 1;
 
-    VK_CHECK(vkCreateImageView(get().gpu.device, &view_info, nullptr, &view));
+    VK_CHECK(vkCreateImageView(vk().gpu.device, &view_info, nullptr, &view));
 }
 
 void ImageView::destroy() {
-    if(view) vkDestroyImageView(get().gpu.device, view, nullptr);
+    if(view) vkDestroyImageView(vk().gpu.device, view, nullptr);
     std::memset(this, 0, sizeof(ImageView));
 }
 
@@ -404,7 +402,7 @@ void Sampler::recreate(VkFilter min, VkFilter mag) {
     sample_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     sample_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     sample_info.anisotropyEnable = VK_TRUE;
-    sample_info.maxAnisotropy = get().gpu.data->dev_prop.limits.maxSamplerAnisotropy;
+    sample_info.maxAnisotropy = vk().gpu.data->dev_prop.limits.maxSamplerAnisotropy;
     sample_info.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
     sample_info.unnormalizedCoordinates = VK_FALSE;
     sample_info.compareEnable = VK_FALSE;
@@ -414,11 +412,11 @@ void Sampler::recreate(VkFilter min, VkFilter mag) {
     sample_info.minLod = 0.0f;
     sample_info.maxLod = 0.0f;
 
-    VK_CHECK(vkCreateSampler(get().gpu.device, &sample_info, nullptr, &sampler));
+    VK_CHECK(vkCreateSampler(vk().gpu.device, &sample_info, nullptr, &sampler));
 }
 
 void Sampler::destroy() {
-    if(sampler) vkDestroySampler(get().gpu.device, sampler, nullptr);
+    if(sampler) vkDestroySampler(vk().gpu.device, sampler, nullptr);
     sampler = VK_NULL_HANDLE;
 }
 
@@ -450,11 +448,11 @@ void Shader::recreate(const std::vector<unsigned char>& data) {
     mod_info.codeSize = data.size();
     mod_info.pCode = (const uint32_t*)data.data();
 
-    VK_CHECK(vkCreateShaderModule(get().gpu.device, &mod_info, nullptr, &shader));
+    VK_CHECK(vkCreateShaderModule(vk().gpu.device, &mod_info, nullptr, &shader));
 }
 
 void Shader::destroy() {
-    if(shader) vkDestroyShaderModule(get().gpu.device, shader, nullptr);
+    if(shader) vkDestroyShaderModule(vk().gpu.device, shader, nullptr);
     std::memset(this, 0, sizeof(Shader));
 }
 
@@ -498,11 +496,11 @@ void Framebuffer::recreate(unsigned int width, unsigned int height, VkRenderPass
     fb_info.height = height;
     fb_info.layers = 1;
 
-    VK_CHECK(vkCreateFramebuffer(get().gpu.device, &fb_info, nullptr, &buf));
+    VK_CHECK(vkCreateFramebuffer(vk().gpu.device, &fb_info, nullptr, &buf));
 }
 
 void Framebuffer::destroy() {
-    if(buf) vkDestroyFramebuffer(get().gpu.device, buf, nullptr);
+    if(buf) vkDestroyFramebuffer(vk().gpu.device, buf, nullptr);
     std::memset(this, 0, sizeof(Framebuffer));
 }
 
@@ -510,8 +508,8 @@ Accel::Accel(const Mesh& mesh) {
     recreate(mesh);
 }
 
-Accel::Accel(const std::vector<Accel::Instance>& blas) {
-    recreate(blas);
+Accel::Accel(const std::vector<Accel>& blas, const std::vector<Mat4>& T) {
+    recreate(blas, T);
 }
 
 Accel::~Accel() {
@@ -534,7 +532,7 @@ Accel& Accel::operator=(Accel&& src) {
 }
 
 void Accel::destroy() {
-    if(accel) get().info.vkDestroyAccelerationStructureKHR(get().gpu.device, accel, nullptr);
+    if(accel) vk().info.vkDestroyAccelerationStructureKHR(vk().gpu.device, accel, nullptr);
     abuf.destroy();
     ibuf.destroy();
     flags = {};
@@ -542,7 +540,7 @@ void Accel::destroy() {
     accel = {};
 }
 
-void Accel::recreate(const std::vector<Accel::Instance>& blas) {
+void Accel::recreate(const std::vector<Accel>& blas, const std::vector<Mat4>& T) {
 
     destroy();
     flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
@@ -552,18 +550,16 @@ void Accel::recreate(const std::vector<Accel::Instance>& blas) {
 
     for(size_t i = 0; i < blas.size(); i++) {
 
-        const Accel::Instance& inst = blas[i];
-
         VkAccelerationStructureDeviceAddressInfoKHR addr = {};
         addr.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
-        addr.accelerationStructure = inst.blas->accel;
+        addr.accelerationStructure = blas[i].accel;
 
         VkDeviceAddress blasAddress =
-            get().info.vkGetAccelerationStructureDeviceAddressKHR(get().gpu.device, &addr);
+            vk().info.vkGetAccelerationStructureDeviceAddressKHR(vk().gpu.device, &addr);
 
         VkAccelerationStructureInstanceKHR as_inst = {};
-        Mat4 T = inst.model.T();
-        std::memcpy(&as_inst.transform, &T, sizeof(as_inst.transform));
+        Mat4 inst = T[i].T();
+        std::memcpy(&as_inst.transform, &inst, sizeof(as_inst.transform));
 
         as_inst.instanceCustomIndex = i;
         as_inst.accelerationStructureReference = blasAddress;
@@ -603,8 +599,8 @@ void Accel::recreate(const std::vector<Accel::Instance>& blas) {
     unsigned int count = (unsigned int)instances.size();
     size.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
 
-    get().info.vkGetAccelerationStructureBuildSizesKHR(
-        get().gpu.device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &build_info, &count,
+    vk().info.vkGetAccelerationStructureBuildSizesKHR(
+        vk().gpu.device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &build_info, &count,
         &size);
 
     abuf.recreate(size.accelerationStructureSize,
@@ -629,7 +625,7 @@ void Accel::create_and_build(VkAccelerationStructureCreateInfoKHR create_info,
 
     create_info.buffer = abuf.buf;
 
-    VK_CHECK(get().info.vkCreateAccelerationStructureKHR(get().gpu.device, &create_info, nullptr,
+    VK_CHECK(vk().info.vkCreateAccelerationStructureKHR(vk().gpu.device, &create_info, nullptr,
                                                          &accel));
 
     Buffer scratch(size.buildScratchSize,
@@ -641,9 +637,9 @@ void Accel::create_and_build(VkAccelerationStructureCreateInfoKHR create_info,
 
     VkAccelerationStructureBuildRangeInfoKHR* offsets[] = {&offset};
 
-    VkCommandBuffer cmds = get().begin_one_time();
-    get().info.vkCmdBuildAccelerationStructuresKHR(cmds, 1, &build_info, offsets);
-    get().end_one_time(cmds);
+    VkCommandBuffer cmds = vk().begin_one_time();
+    vk().info.vkCmdBuildAccelerationStructuresKHR(cmds, 1, &build_info, offsets);
+    vk().end_one_time(cmds);
 }
 
 void Accel::recreate(const Mesh& mesh) {
@@ -687,8 +683,8 @@ void Accel::recreate(const Mesh& mesh) {
 
     size.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
 
-    get().info.vkGetAccelerationStructureBuildSizesKHR(
-        get().gpu.device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &build_info,
+    vk().info.vkGetAccelerationStructureBuildSizesKHR(
+        vk().gpu.device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &build_info,
         &maxPrimitiveCount, &size);
 
     abuf.recreate(size.accelerationStructureSize,
@@ -704,9 +700,6 @@ void Accel::recreate(const Mesh& mesh) {
     create_and_build(create_info, build_info, offset);
 }
 
-Manager::Manager(unsigned int first_id) : next_id(first_id) {
-}
-
 void Manager::begin_frame() {
 
     if(minimized) return;
@@ -716,7 +709,7 @@ void Manager::begin_frame() {
 
     vkWaitForFences(gpu.device, 1, &frame.fence, VK_TRUE, UINT64_MAX);
 
-    erased_during[current_frame].clear();
+    do_erase();
 
     VkResult result = vkAcquireNextImageKHR(gpu.device, swapchain.swapchain, UINT64_MAX,
                                             frame.avail, nullptr, &current_img);
@@ -846,11 +839,14 @@ void Manager::end_frame() {
 }
 
 VkCommandBuffer Manager::render_imgui() {
-
     ImGui::Render();
     VkCommandBuffer cmds = begin_secondary();
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmds);
     return cmds;
+}
+
+unsigned int Manager::frame() const {
+    return current_frame;
 }
 
 VkCommandBuffer Manager::begin_secondary() {
@@ -992,16 +988,22 @@ void Manager::init_imgui() {
 
 void Manager::end_one_time(VkCommandBuffer cmds) {
 
-    vkEndCommandBuffer(cmds);
+    VK_CHECK(vkEndCommandBuffer(cmds));
+
+    VkFence fence = {};
+    VkFenceCreateInfo finfo = {};
+    finfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    VK_CHECK(vkCreateFence(gpu.device, &finfo, nullptr, &fence));
 
     VkSubmitInfo submit_info = {};
     submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submit_info.commandBufferCount = 1;
     submit_info.pCommandBuffers = &cmds;
 
-    VK_CHECK(vkQueueSubmit(gpu.graphics_queue, 1, &submit_info, nullptr));
-    VK_CHECK(vkQueueWaitIdle(gpu.graphics_queue));
+    VK_CHECK(vkQueueSubmit(gpu.graphics_queue, 1, &submit_info, fence));
+    VK_CHECK(vkWaitForFences(gpu.device, 1, &fence, VK_TRUE, UINT64_MAX));
 
+    vkDestroyFence(gpu.device, fence, nullptr);
     vkFreeCommandBuffers(gpu.device, command_pool, 1, &cmds);
 }
 
@@ -1044,9 +1046,8 @@ void Manager::destroy() {
     VK_CHECK(vkDeviceWaitIdle(gpu.device));
 
     for(unsigned int i = 0; i < Frame::MAX_IN_FLIGHT; i++) {
-        erased_during[i].clear();
+        erase_queue[i].clear();
     }
-    resources.clear();
 
     ImGui_ImplVulkan_Shutdown();
     destroy_swapchain();

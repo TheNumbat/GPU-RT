@@ -1,9 +1,7 @@
 
 CLEANUP
     compact BLAS after creation
-    refcount refs like shared pointers
     use transfer queue 
-    use a fence for one time submits
     use special final compositing pipeline for Manager output 
     abstract pipeline & render graph creation 
 

@@ -6,8 +6,6 @@
 GPURT::GPURT(Window& window, std::string scene_file) : window(window), cam(window.drawable()) {
 
     scene.load(Scene::Load_Opts(), scene_file, cam);
-
-    TLAS = VK::make<VK::Accel>();
     build_accel();
 }
 
@@ -16,7 +14,7 @@ GPURT::~GPURT() {
 
 void GPURT::render() {
 
-    VK::Manager& vk = VK::get();
+    VK::Manager& vk = VK::vk();
 
     vk.pipeline->update_uniforms(cam);
 
@@ -33,12 +31,11 @@ void GPURT::build_accel() {
 
     BLAS.clear();
     scene.for_objs([this](const Object& obj) {
-        auto as = VK::make<VK::Accel>();
-        as->recreate(obj.mesh());
-        BLAS.push_back({std::move(as), obj.pose.transform()});
+        BLAS.push_back(VK::Accel(obj.mesh()));
+        BLAS_T.push_back(obj.pose.transform());
     });
 
-    TLAS->recreate(BLAS);
+    TLAS.recreate(BLAS, BLAS_T);
 }
 
 void GPURT::load_scene(bool clear) {

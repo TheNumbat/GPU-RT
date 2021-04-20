@@ -13,15 +13,15 @@ inline std::ofstream log_file("log.txt");
 
 inline void log(std::string fmt, ...) {
     std::lock_guard<std::mutex> lock(printf_lock);
-    static char buffer[512];
+    static char buffer[1024];
     va_list args;
     va_start(args, fmt);
-    int n = vsnprintf(buffer, 512, fmt.c_str(), args);
+    int n = vsnprintf(buffer, 1024, fmt.c_str(), args);
     va_end(args);
-    if(n < 511)
+    if(n < 1023)
         buffer[n] = '\0';
     else
-        buffer[511] = '\0';
+        buffer[1023] = '\0';
     std::cout << std::string(buffer);
     log_file << std::string(buffer);
     std::cout.flush();

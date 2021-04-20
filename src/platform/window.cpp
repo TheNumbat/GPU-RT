@@ -127,14 +127,15 @@ std::optional<SDL_Event> Window::event() {
     return std::nullopt;
 }
 
-void Window::begin_frame() {
+bool Window::begin_frame() {
     set_dpi();
     ImGuiIO& IO = ImGui::GetIO();
     IO.DisplayFramebufferScale = scale({1.0f, 1.0f});
 
     ImGui_ImplSDL2_NewFrame(window);
-    VK::vk().begin_frame();
+    bool ret = VK::vk().begin_frame();
     ImGui::NewFrame();
+    return ret;
 }
 
 Vec2 Window::scale(Vec2 pt) {

@@ -342,6 +342,7 @@ void RTPipe::recreate(const Scene& scene) {
     pipe->destroy();
     create_desc(scene);
     create_pipe();
+    create_sbt();
 }
 
 void RTPipe::destroy() {
@@ -364,47 +365,101 @@ void RTPipe::update_uniforms(const Camera& cam) {
     camera_uniforms[vk().frame()]->write(&ubo, sizeof(ubo));
 }
 
-void RTPipe::use_images(const std::vector<std::reference_wrapper<ImageView>>& out) {
+void RTPipe::use_image(const ImageView& out) {
 
-    for(unsigned int i = 0; i < Manager::MAX_IN_FLIGHT; i++) {
+    unsigned int i = vk().frame();
+    VkDescriptorImageInfo img_info = {};
+    img_info.imageLayout = out.img().layout;
+    img_info.imageView = out.view;
 
-        VkDescriptorImageInfo img_info = {};
-        img_info.imageLayout = out[i].get().img().layout;
-        img_info.imageView = out[i].get().view;
+    VkWriteDescriptorSet img_write = {};
+    img_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    img_write.dstSet = pipe->descriptor_sets[i];
+    img_write.dstBinding = 4;
+    img_write.dstArrayElement = 0;
+    img_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    img_write.descriptorCount = 1;
+    img_write.pImageInfo = &img_info;
 
-        VkWriteDescriptorSet img_write = {};
-        img_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        img_write.dstSet = pipe->descriptor_sets[i];
-        img_write.dstBinding = 4;
-        img_write.dstArrayElement = 0;
-        img_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        img_write.descriptorCount = 1;
-        img_write.pImageInfo = &img_info;
-
-        vkUpdateDescriptorSets(vk().device(), 1, &img_write, 0, nullptr);
-    }
+    vkUpdateDescriptorSets(vk().device(), 1, &img_write, 0, nullptr);
 }
 
 void RTPipe::use_accel(const Accel& tlas) {
 
-    for(unsigned int i = 0; i < Manager::MAX_IN_FLIGHT; i++) {
+    VkWriteDescriptorSetAccelerationStructureKHR acc_info = {};
+    acc_info.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+    acc_info.accelerationStructureCount = 1;
+    acc_info.pAccelerationStructures = &tlas.accel;
 
-        VkWriteDescriptorSetAccelerationStructureKHR acc_info = {};
-        acc_info.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
-        acc_info.accelerationStructureCount = 1;
-        acc_info.pAccelerationStructures = &tlas.accel;
+    VkWriteDescriptorSet acw = {};
+    acw.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    acw.dstSet = pipe->descriptor_sets[vk().frame()];
+    acw.dstBinding = 3;
+    acw.dstArrayElement = 0;
+    acw.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+    acw.descriptorCount = 1;
+    acw.pNext = &acc_info;
 
-        VkWriteDescriptorSet acw = {};
-        acw.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        acw.dstSet = pipe->descriptor_sets[i];
-        acw.dstBinding = 3;
-        acw.dstArrayElement = 0;
-        acw.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
-        acw.descriptorCount = 1;
-        acw.pNext = &acc_info;
+    vkUpdateDescriptorSets(vk().device(), 1, &acw, 0, nullptr);
+}
 
-        vkUpdateDescriptorSets(vk().device(), 1, &acw, 0, nullptr);
+static unsigned int align_up(unsigned int v, unsigned int a) {
+    return (v + a - 1) & ~(a - 1);
+}
+
+void RTPipe::trace(VkCommandBuffer& cmds, VkExtent2D ext) {
+
+    vkCmdBindPipeline(cmds, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipe->pipe);
+    vkCmdBindDescriptorSets(cmds, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipe->p_layout, 0, 1,
+                            &pipe->descriptor_sets[vk().frame()], 0, nullptr);
+    vkCmdPushConstants(cmds, pipe->p_layout,
+                       VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
+                           VK_SHADER_STAGE_MISS_BIT_KHR,
+                       0, sizeof(RTPipe_Constants), &consts);
+
+    unsigned int groupSize = align_up(vk().rtx.properties.shaderGroupHandleSize,
+                                      vk().rtx.properties.shaderGroupBaseAlignment);
+    unsigned int groupStride = groupSize;
+    VkDeviceAddress sbt_addr = sbt->address();
+
+    using Stride = VkStridedDeviceAddressRegionKHR;
+    std::array<Stride, 4> addrs{Stride{sbt_addr + 0u * groupSize, groupStride, groupSize}, // raygen
+                                Stride{sbt_addr + 1u * groupSize, groupStride, groupSize}, // miss
+                                Stride{sbt_addr + 2u * groupSize, groupStride, groupSize}, // hit
+                                Stride{0u, 0u, 0u}};
+
+    vk().rtx.vkCmdTraceRaysKHR(cmds, &addrs[0], &addrs[1], &addrs[2], &addrs[3], ext.width,
+                               ext.height, 1);
+}
+
+void RTPipe::create_sbt() {
+
+    unsigned int shader_count = 3;
+    unsigned int groupHandleSize = vk().rtx.properties.shaderGroupHandleSize;
+    unsigned int groupSizeAligned =
+        align_up(groupHandleSize, vk().rtx.properties.shaderGroupBaseAlignment);
+    unsigned int sbtSize = shader_count * groupSizeAligned;
+
+    std::vector<unsigned char> shaderHandleStorage(sbtSize);
+
+    VK_CHECK(vk().rtx.vkGetRayTracingShaderGroupHandlesKHR(
+        vk().device(), pipe->pipe, 0, shader_count, sbtSize, shaderHandleStorage.data()));
+
+    Buffer staging(sbtSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+    sbt->recreate(sbtSize,
+                  VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
+                      VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR,
+                  VMA_MEMORY_USAGE_GPU_ONLY);
+
+    unsigned char* data = (unsigned char*)staging.map();
+
+    for(unsigned int g = 0; g < shader_count; g++) {
+        std::memcpy(data, shaderHandleStorage.data() + g * groupHandleSize, groupHandleSize);
+        data += groupSizeAligned;
     }
+
+    staging.unmap();
+    staging.copy_to(sbt);
 }
 
 void RTPipe::create_pipe() {

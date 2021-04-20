@@ -42,15 +42,17 @@ private:
     Window& window;
     Scene scene;
 
-    std::vector<VK::Accel> BLAS;
+    std::vector<VK::Drop<VK::Accel>> BLAS;
     std::vector<Mat4> BLAS_T;
-    VK::Accel TLAS;
+    VK::Drop<VK::Accel> TLAS;
 
     struct Frame {
-        VK::Drop<VK::Image> color, depth;
-        VK::Drop<VK::ImageView> color_view, depth_view;
+        VK::Drop<VK::Image> color, depth, rt_target;
+        VK::Drop<VK::ImageView> color_view, depth_view, rt_target_view;
         VK::Drop<VK::Framebuffer> fb;
     };
+
+    bool use_rt = true;
 
     std::array<Frame, VK::Manager::MAX_IN_FLIGHT> frames;
     VK::MeshPipe mesh_pipe;

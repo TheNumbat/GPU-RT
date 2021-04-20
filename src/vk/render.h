@@ -103,13 +103,18 @@ struct RTPipe {
     void recreate_swap(const Scene& scene);
     void update_uniforms(const Camera& cam);
     void use_accel(const Accel& tlas);
-    void use_images(const std::vector<std::reference_wrapper<ImageView>>& out);
+    void use_image(const ImageView& out);
+
+    void trace(VkCommandBuffer& cmds, VkExtent2D ext);
 
     Drop<PipeData> pipe;
 
 private:
     std::vector<Drop<Buffer>> camera_uniforms;
+    Drop<Buffer> sbt;
+    RTPipe_Constants consts;
 
+    void create_sbt();
     void create_pipe();
     void create_desc(const Scene& scene);
 };

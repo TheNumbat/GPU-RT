@@ -146,6 +146,16 @@ void Buffer::recreate(VkDeviceSize sz, VkBufferUsageFlags busage, VmaMemoryUsage
     VK_CHECK(vmaCreateBuffer(vk().gpu_alloc, &buf_info, &alloc_info, &buf, &mem, nullptr));
 }
 
+void* Buffer::map() const {
+    void* map;
+    VK_CHECK(vmaMapMemory(vk().gpu_alloc, mem, &map));
+    return map;
+}
+
+void Buffer::unmap() const {
+    vmaUnmapMemory(vk().gpu_alloc, mem);
+}
+
 VkDeviceAddress Buffer::address() const {
     VkBufferDeviceAddressInfo info = {};
     info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
@@ -307,65 +317,75 @@ void Image::transition(VkCommandBuffer& cmds, VkImageLayout old_l, VkImageLayout
 
     VkPipelineStageFlags src_stage, dst_stage;
 
-    if(old_l == VK_IMAGE_LAYOUT_UNDEFINED && new_l == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
-
+    switch(old_l) {
+    case VK_IMAGE_LAYOUT_UNDEFINED: {
         barrier.srcAccessMask = 0;
-        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         src_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-        dst_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    } break;
 
-    } else if(old_l == VK_IMAGE_LAYOUT_UNDEFINED && new_l == VK_IMAGE_LAYOUT_GENERAL) {
-        
-        barrier.srcAccessMask = 0;
-        barrier.dstAccessMask = 0;
-        src_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-        dst_stage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-
-    } else if(old_l == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
-              new_l == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
-
+    case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL: {
         barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
         src_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        dst_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    } break;
 
-    } else if(old_l == VK_IMAGE_LAYOUT_UNDEFINED &&
-              new_l == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+    case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL: {
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        src_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    } break;
 
-        barrier.srcAccessMask = 0;
-        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        src_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-        dst_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-
-    } else if(old_l == VK_IMAGE_LAYOUT_UNDEFINED &&
-              new_l == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
-
-        barrier.srcAccessMask = 0;
-        barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
-                                VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-        src_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-        dst_stage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-
-    } else if(old_l == VK_IMAGE_LAYOUT_UNDEFINED &&
-              new_l == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
-
-        barrier.srcAccessMask = 0;
-        barrier.dstAccessMask =
-            VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        src_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-        dst_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-
-    } else if(old_l == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
-              new_l == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
-
+    case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL: {
         barrier.srcAccessMask =
             VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
         src_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dst_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    } break;
 
-    } else {
-        die("Unsupported image layout transition!");
+    case VK_IMAGE_LAYOUT_GENERAL: {
+        barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+        src_stage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    } break;
+
+    case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL: {
+        barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        src_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    } break;
+
+    default: die("Unsupported image transition src.");
+    }
+
+    switch(new_l) {
+    case VK_IMAGE_LAYOUT_GENERAL: {
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+        dst_stage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    } break;
+
+    case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL: {
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        dst_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    } break;
+
+    case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL: {
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        dst_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    } break;
+
+    case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL: {
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        dst_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    } break;
+
+    case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL: {
+        barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                                VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        dst_stage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    } break;
+
+    case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL: {
+        barrier.dstAccessMask =
+            VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        dst_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    } break;
+
+    default: die("Unsupported image transition dst.");
     }
 
     vkCmdPipelineBarrier(cmds, src_stage, dst_stage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
@@ -673,7 +693,7 @@ Accel::Accel(const Mesh& mesh) {
     recreate(mesh);
 }
 
-Accel::Accel(const std::vector<Accel>& blas, const std::vector<Mat4>& T) {
+Accel::Accel(const std::vector<Drop<Accel>>& blas, const std::vector<Mat4>& T) {
     recreate(blas, T);
 }
 
@@ -705,7 +725,7 @@ void Accel::destroy() {
     accel = {};
 }
 
-void Accel::recreate(const std::vector<Accel>& blas, const std::vector<Mat4>& T) {
+void Accel::recreate(const std::vector<Drop<Accel>>& blas, const std::vector<Mat4>& T) {
 
     destroy();
     flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
@@ -717,7 +737,7 @@ void Accel::recreate(const std::vector<Accel>& blas, const std::vector<Mat4>& T)
 
         VkAccelerationStructureDeviceAddressInfoKHR addr = {};
         addr.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
-        addr.accelerationStructure = blas[i].accel;
+        addr.accelerationStructure = blas[i]->accel;
 
         VkDeviceAddress blasAddress =
             vk().rtx.vkGetAccelerationStructureDeviceAddressKHR(vk().device(), &addr);
@@ -865,9 +885,7 @@ void Accel::recreate(const Mesh& mesh) {
     create_and_build(create_info, build_info, offset);
 }
 
-void Manager::begin_frame() {
-
-    if(minimized) return;
+bool Manager::begin_frame() {
 
     Frame& frame = frames[current_frame];
     Swapchain_Slot& image = swapchain.slots[current_img];
@@ -875,13 +893,19 @@ void Manager::begin_frame() {
     vkWaitForFences(gpu.device, 1, &frame.fence, VK_TRUE, UINT64_MAX);
 
     do_erase();
+    if(frame.buffers.size()) {
+        vkFreeCommandBuffers(gpu.device, command_pool, frame.buffers.size(), frame.buffers.data());
+        frame.buffers.clear();
+    }
+
+    if(minimized) return true;
 
     VkResult result = vkAcquireNextImageKHR(gpu.device, swapchain.swapchain, UINT64_MAX,
                                             frame.avail, nullptr, &current_img);
 
     if(result == VK_ERROR_OUT_OF_DATE_KHR) {
         recreate_swapchain();
-        return;
+        return true;
     } else if(result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         die("Failed to acquire next image: %s", vk_err_str(result).c_str());
     }
@@ -893,10 +917,7 @@ void Manager::begin_frame() {
 
     ImGui_ImplVulkan_NewFrame();
 
-    if(frame.buffers.size()) {
-        vkFreeCommandBuffers(gpu.device, command_pool, frame.buffers.size(), frame.buffers.data());
-        frame.buffers.clear();
-    }
+    return false;
 }
 
 void Manager::submit_frame(ImageView& out_image) {
@@ -953,12 +974,14 @@ void Manager::trigger_resize() {
 
 void Manager::end_frame(ImageView& img) {
 
-    submit_frame(img);
+    ImGui::Render();
 
     if(minimized) {
         recreate_swapchain();
         return;
     }
+
+    submit_frame(img);
 
     Frame& frame = frames[current_frame];
 
@@ -1298,6 +1321,18 @@ void Manager::init_rt() {
         info.instance, "vkCreateRayTracingPipelinesKHR");
 
     if(!rtx.vkCreateRayTracingPipelinesKHR) die("Failed to load vkCreateRayTracingPipelinesKHR");
+
+    rtx.vkGetRayTracingShaderGroupHandlesKHR =
+        (PFN_vkGetRayTracingShaderGroupHandlesKHR)vkGetInstanceProcAddr(
+            info.instance, "vkGetRayTracingShaderGroupHandlesKHR");
+
+    if(!rtx.vkGetRayTracingShaderGroupHandlesKHR)
+        die("Failed to load vkGetRayTracingShaderGroupHandlesKHR");
+
+    rtx.vkCmdTraceRaysKHR =
+        (PFN_vkCmdTraceRaysKHR)vkGetInstanceProcAddr(info.instance, "vkCmdTraceRaysKHR");
+
+    if(!rtx.vkCmdTraceRaysKHR) die("Failed to load vkCmdTraceRaysKHR");
 }
 
 void Manager::init_debug_callback() {
@@ -1362,7 +1397,6 @@ void Manager::Compositor::composite(VkCommandBuffer& cmds, ImageView& view) {
                             &descriptor_sets[vk().current_frame], 0, nullptr);
     vkCmdDraw(cmds, 4, 1, 0, 0);
 
-    ImGui::Render();
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmds);
 
     vkCmdEndRenderPass(vk().frames[vk().current_frame].composite);
@@ -1692,8 +1726,9 @@ void Manager::enumerate_gpus() {
         }
         {
             g.prop_2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-            g.prop_2.pNext = &g.rt_prop;
-            g.rt_prop.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
+            g.prop_2.pNext = &rtx.properties;
+            rtx.properties.sType =
+                VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
             rtx.vkGetPhysicalDeviceProperties2(g.device, &g.prop_2);
         }
         {

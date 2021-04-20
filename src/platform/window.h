@@ -25,7 +25,7 @@ public:
     std::optional<SDL_Event> event();
     bool is_down(SDL_Scancode key);
 
-    void begin_frame();
+    bool begin_frame();
 
 private:
     float prev_dpi = 0.0f;

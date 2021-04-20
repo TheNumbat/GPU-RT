@@ -31,21 +31,46 @@ void GPURT::render() {
 
     VkCommandBuffer cmds = vk.begin();
 
-    VkClearValue col, depth;
-    col.color = {0.22f, 0.22f, 0.22f, 1.0f};
-    depth.depthStencil = {0.0f, 0};
+    if(use_rt) {
 
-    mesh_pipe.update_uniforms(cam);
+        rt_pipe.use_image(f.rt_target_view);
+        rt_pipe.use_accel(TLAS);
+        rt_pipe.update_uniforms(cam);
+        rt_pipe.trace(cmds, {f.color->w, f.color->h});
 
-    mesh_pass->begin(cmds, f.fb, {col, depth});
+        VkImageBlit region = {};
+        region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.srcSubresource.layerCount = 1;
+        region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.dstSubresource.layerCount = 1;
+        region.dstOffsets[1] = {(int)f.rt_target->w, (int)f.rt_target->h, 1};
+        region.srcOffsets[1] = {(int)f.rt_target->w, (int)f.rt_target->h, 1};
 
-    scene.for_objs([&, this](const Object& obj) {
-        obj.mesh().render(cmds, mesh_pipe.pipe, obj.pose.transform());
-    });
+        f.rt_target->transition(cmds, VK_IMAGE_LAYOUT_GENERAL,
+                                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+        f.color->transition(cmds, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        vkCmdBlitImage(cmds, f.rt_target->img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, f.color->img,
+                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region, VK_FILTER_NEAREST);
+        f.color->transition(cmds, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        f.rt_target->transition(cmds, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                VK_IMAGE_LAYOUT_GENERAL);
 
-    mesh_pass->end(cmds);
+    } else {
+        VkClearValue col, depth;
+        col.color = {0.22f, 0.22f, 0.22f, 1.0f};
+        depth.depthStencil = {0.0f, 0};
 
-    vk.end_frame(frames[vk.frame()].color_view);
+        mesh_pipe.update_uniforms(cam);
+        mesh_pass->begin(cmds, f.fb, {col, depth});
+
+        scene.for_objs([&, this](const Object& obj) {
+            obj.mesh().render(cmds, mesh_pipe.pipe, obj.pose.transform());
+        });
+
+        mesh_pass->end(cmds);
+    }
 }
 
 void GPURT::build_pass() {
@@ -107,16 +132,24 @@ void GPURT::build_images() {
     VkExtent2D ext = vk.extent();
     for(Frame& f : frames) {
 
-        f.color->recreate(ext.width, ext.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_TILING_OPTIMAL,
-                          VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+        f.color->recreate(ext.width, ext.height, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
+                          VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                              VK_IMAGE_USAGE_TRANSFER_DST_BIT,
                           VMA_MEMORY_USAGE_GPU_ONLY);
         f.depth->recreate(ext.width, ext.height, vk.find_depth_format(), VK_IMAGE_TILING_OPTIMAL,
                           VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
 
-        f.color->transition(VK_IMAGE_LAYOUT_GENERAL);
+        f.rt_target->recreate(ext.width, ext.height, VK_FORMAT_R32G32B32A32_SFLOAT,
+                              VK_IMAGE_TILING_OPTIMAL,
+                              VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                              VMA_MEMORY_USAGE_GPU_ONLY);
+
+        f.color->transition(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        f.rt_target->transition(VK_IMAGE_LAYOUT_GENERAL);
 
         f.color_view->recreate(f.color, VK_IMAGE_ASPECT_COLOR_BIT);
         f.depth_view->recreate(f.depth, VK_IMAGE_ASPECT_DEPTH_BIT);
+        f.rt_target_view->recreate(f.rt_target, VK_IMAGE_ASPECT_COLOR_BIT);
     }
 }
 
@@ -136,22 +169,17 @@ void GPURT::build_pipe() {
 
 void GPURT::build_rt() {
     rt_pipe.recreate(scene);
-
-    std::vector<std::reference_wrapper<VK::ImageView>> views;
-    for(auto& f : frames)
-        views.push_back(f.color_view);
-    rt_pipe.use_images(views);
 }
 
 void GPURT::build_accel() {
 
     BLAS.clear();
     scene.for_objs([this](const Object& obj) {
-        BLAS.push_back(VK::Accel(obj.mesh()));
+        BLAS.push_back({VK::Accel(obj.mesh())});
         BLAS_T.push_back(obj.pose.transform());
     });
 
-    TLAS.recreate(BLAS, BLAS_T);
+    TLAS->recreate(BLAS, BLAS_T);
     rt_pipe.use_accel(TLAS);
 }
 
@@ -187,6 +215,9 @@ void GPURT::UIsidebar() {
     ImGui::Text("Edit Scene");
     if(ImGui::Button("Open Scene")) load_scene(true);
     if(ImGui::Button("Import Objects")) load_scene(false);
+    ImGui::Separator();
+
+    ImGui::Checkbox("Use RTX", &use_rt);
     ImGui::Separator();
 
     if(!scene.empty()) {
@@ -301,9 +332,12 @@ void GPURT::loop() {
             event(evt);
         }
 
-        window.begin_frame();
+        bool skip_render = window.begin_frame();
         UIsidebar();
-        render();
+
+        if(!skip_render) render();
+
+        VK::vk().end_frame(frames[VK::vk().frame()].color_view);
     }
 }
 

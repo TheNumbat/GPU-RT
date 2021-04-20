@@ -17,9 +17,11 @@
 
 // porting to exile2
 //      swap back to custom lib
+//          vector, map, maybe
 //      add quat/camera to lib
 //      literals instead of strings
 //      single % in logging
+//      use u32, u8, etc.
 
 #define VK_CHECK(f)                                                                                \
     do {                                                                                           \
@@ -41,6 +43,7 @@ struct Sampler;
 struct Shader;
 struct Framebuffer;
 struct Accel;
+template<typename T> struct Drop;
 
 struct Mesh;
 struct MeshPipe;
@@ -62,6 +65,8 @@ struct Buffer {
     void destroy();
 
     VkDeviceAddress address() const;
+    void* map() const;
+    void unmap() const;
 
     void copy_to(const Buffer& dst);
     void write(const void* data, size_t size);
@@ -242,7 +247,7 @@ struct Accel {
 
     Accel() = default;
     Accel(const Mesh& mesh);
-    Accel(const std::vector<Accel>& blas, const std::vector<Mat4>& inst);
+    Accel(const std::vector<Drop<Accel>>& blas, const std::vector<Mat4>& inst);
     ~Accel();
 
     Accel(const Accel&) = delete;
@@ -251,7 +256,7 @@ struct Accel {
     Accel& operator=(Accel&& src);
 
     void recreate(const Mesh& mesh);
-    void recreate(const std::vector<Accel>& blas, const std::vector<Mat4>& inst);
+    void recreate(const std::vector<Drop<Accel>>& blas, const std::vector<Mat4>& inst);
     void destroy();
 
     VkAccelerationStructureKHR accel = {};
@@ -289,6 +294,8 @@ struct PipeData {
 template<typename T> struct Drop {
 
     Drop() = default;
+    Drop(T&& resource) : resource(std::move(resource)) {
+    }
     ~Drop();
 
     Drop(const Drop&) = delete;
@@ -320,7 +327,7 @@ public:
     void init(SDL_Window* window);
     void destroy();
 
-    void begin_frame();
+    bool begin_frame();
     void end_frame(ImageView& img);
 
     void trigger_resize();
@@ -361,6 +368,9 @@ public:
         PFN_vkCmdBuildAccelerationStructuresKHR vkCmdBuildAccelerationStructuresKHR;
         PFN_vkGetAccelerationStructureDeviceAddressKHR vkGetAccelerationStructureDeviceAddressKHR;
         PFN_vkCreateRayTracingPipelinesKHR vkCreateRayTracingPipelinesKHR;
+        PFN_vkGetRayTracingShaderGroupHandlesKHR vkGetRayTracingShaderGroupHandlesKHR;
+        PFN_vkCmdTraceRaysKHR vkCmdTraceRaysKHR;
+        VkPhysicalDeviceRayTracingPipelinePropertiesKHR properties = {};
     };
     RTX rtx;
 
@@ -383,7 +393,6 @@ private:
         VkPhysicalDeviceProperties dev_prop = {};
         VkPhysicalDeviceMemoryProperties mem_prop = {};
         VkPhysicalDeviceProperties2KHR prop_2 = {};
-        VkPhysicalDeviceRayTracingPipelinePropertiesKHR rt_prop = {};
 
         std::vector<VkPresentModeKHR> modes;
         std::vector<VkSurfaceFormatKHR> fmts;

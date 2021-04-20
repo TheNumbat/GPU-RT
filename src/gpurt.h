@@ -36,7 +36,11 @@ private:
 
     Window& window;
     Scene scene;
+
     std::vector<VK::Accel> BLAS;
     std::vector<Mat4> BLAS_T;
     VK::Accel TLAS;
+
+    VK::Drop<VK::Image> output;
+    VK::Drop<VK::ImageView> output_view;
 };

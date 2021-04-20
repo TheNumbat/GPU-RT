@@ -105,10 +105,6 @@ void Window::shutdown() {
     SDL_Quit();
 }
 
-void Window::complete_frame() {
-    VK::vk().end_frame();
-}
-
 std::optional<SDL_Event> Window::event() {
 
     SDL_Event e;

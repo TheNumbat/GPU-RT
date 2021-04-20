@@ -99,7 +99,7 @@ find_program(GLSLC glslc)
 
     add_custom_command(
            OUTPUT ${current-output-path}
-           COMMAND ${GLSLC} -o ${current-output-path} ${current-shader-path}
+           COMMAND ${GLSLC} -o ${current-output-path} ${current-shader-path} --target-env=vulkan1.2
            DEPENDS ${current-shader-path}
            IMPLICIT_DEPENDS CXX ${current-shader-path}
            VERBATIM)
@@ -109,8 +109,11 @@ find_program(GLSLC glslc)
     target_sources(${TARGET} PRIVATE ${current-output-path})
 endfunction(add_shader)
 
-add_shader(fcpw-gpu "1.vert")
-add_shader(fcpw-gpu "1.frag")
+add_shader(fcpw-gpu "out.vert")
+add_shader(fcpw-gpu "out.frag")
+add_shader(fcpw-gpu "rt.rchit")
+add_shader(fcpw-gpu "rt.rmiss")
+add_shader(fcpw-gpu "rt.rgen")
 
 # define include paths
 

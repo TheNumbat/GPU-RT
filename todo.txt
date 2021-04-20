@@ -2,7 +2,6 @@
 CLEANUP
     compact BLAS after creation
     use transfer queue 
-    use special final compositing pipeline for Manager output 
     abstract pipeline & render graph creation 
 
 SETUP

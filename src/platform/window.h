@@ -26,7 +26,6 @@ public:
     bool is_down(SDL_Scancode key);
 
     void begin_frame();
-    void complete_frame();
 
 private:
     float prev_dpi = 0.0f;

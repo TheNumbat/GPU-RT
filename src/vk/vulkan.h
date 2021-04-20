@@ -9,6 +9,7 @@
 
 #include <SDL2/SDL.h>
 #include <lib/mathlib.h>
+#include <util/image.h>
 #include <vulkan/vulkan.h>
 
 #include "vk_mem_alloc.h"
@@ -60,10 +61,12 @@ struct Buffer {
     void destroy();
 
     VkDeviceAddress address() const;
+
     void copy_to(const Buffer& dst);
-    void to_image(const Image& image);
     void write(const void* data, size_t size);
     void write_staged(const void* data, size_t dsize);
+
+    void to_image(VkCommandBuffer& cmds, const Image& image);
 
     VkBuffer buf = VK_NULL_HANDLE;
 
@@ -91,6 +94,9 @@ struct Image {
     void destroy();
 
     void transition(VkImageLayout new_l);
+    void transition(VkCommandBuffer& cmds, VkImageLayout new_l);
+
+    void write(Util::Image& img);
 
     VkImage img = VK_NULL_HANDLE;
 
@@ -185,6 +191,22 @@ struct Framebuffer {
     VkFramebuffer buf = VK_NULL_HANDLE;
 };
 
+struct Pass {
+
+    Pass() = default;
+    ~Pass();
+
+    Pass(const Pass&) = delete;
+    Pass(Pass&& src);
+    Pass& operator=(const Pass&) = delete;
+    Pass& operator=(Pass&& src);
+
+    void recreate();
+    void destroy();
+
+    VkRenderPass pass = VK_NULL_HANDLE;
+};
+
 template<typename T> struct Drop {
 
     Drop() = default;
@@ -195,8 +217,19 @@ template<typename T> struct Drop {
     Drop& operator=(const Drop&) = delete;
     Drop& operator=(Drop&& src) = default;
 
-    T* operator->() { return &resource; }
-    const T* operator->() const { return &resource; }
+    T* operator->() {
+        return &resource;
+    }
+    const T* operator->() const {
+        return &resource;
+    }
+
+    operator T&() {
+        return resource;
+    }
+    operator T const &() const {
+        return resource;
+    }
 
 private:
     T resource;
@@ -236,17 +269,16 @@ class Manager {
 public:
     void init(SDL_Window* window);
     void destroy();
+
     void begin_frame();
-    void end_frame();
+    void end_frame(const ImageView& img);
+
     void trigger_resize();
 
-    VkCommandBuffer begin_secondary();
+    VkCommandBuffer begin_secondary(const Framebuffer& fb, const Pass& pass);
     unsigned int frame() const;
 
-    Pipeline* pipeline = nullptr;
-
-    template<typename T> 
-    void drop(T&& resource) {
+    template<typename T> void drop(T&& resource) {
         std::lock_guard<std::mutex> lock(erase_mut[current_frame]);
         erase_queue[current_frame].push_back({std::move(resource)});
     }
@@ -286,13 +318,13 @@ private:
         PFN_vkGetAccelerationStructureBuildSizesKHR vkGetAccelerationStructureBuildSizesKHR;
         PFN_vkCmdBuildAccelerationStructuresKHR vkCmdBuildAccelerationStructuresKHR;
         PFN_vkGetAccelerationStructureDeviceAddressKHR vkGetAccelerationStructureDeviceAddressKHR;
+        PFN_vkCreateRayTracingPipelinesKHR vkCreateRayTracingPipelinesKHR;
     };
 
     struct Swapchain_Slot {
         VkImage image;
         VkFence frame_fence;
         ImageView view;
-        Framebuffer framebuffer;
     };
 
     struct Swapchain {
@@ -324,12 +356,43 @@ private:
         VkQueue graphics_queue = {}, present_queue = {};
     };
 
+    struct Compositor {
+
+        void init();
+        void destroy();
+        void create_swap();
+        void destroy_swap();
+
+        void composite(VkCommandBuffer& cmds, const ImageView& img);
+        VkRenderPass get_pass() {
+            return pass;
+        }
+
+    private:
+        Sampler sampler;
+        VkRenderPass pass;
+        VkPipeline pipeline;
+        VkPipelineLayout p_layout;
+        VkDescriptorSetLayout d_layout;
+
+        std::vector<VkDescriptorSet> descriptor_sets;
+        std::vector<Framebuffer> framebuffers;
+
+        VkRenderPassBeginInfo pass_info();
+        void update_img(const ImageView& view);
+        void create_pipe();
+        void create_pass();
+        void create_fbs();
+        void create_desc();
+    };
+
     Info info;
     Frames frames;
     Swapchain swapchain;
+    Compositor compositor;
+
     VkCommandPool command_pool = {};
     VkDescriptorPool descriptor_pool = {};
-    VkRenderPass output_pass;
 
     unsigned int current_img = 0, current_frame = 0;
     bool needs_resize = false, minimized = false;
@@ -351,6 +414,7 @@ private:
     void init_rt();
 
     void create_frames();
+    void create_pipeline();
     void create_gpu_alloc();
     void create_swapchain();
     void create_output_pass();
@@ -364,7 +428,7 @@ private:
 
     VkCommandBuffer begin_one_time();
     void end_one_time(VkCommandBuffer cmds);
-    void submit_frame();
+    void submit_frame(const ImageView& img);
 
     VkFormat find_depth_format();
     VkExtent2D choose_surface_extent();
@@ -381,7 +445,7 @@ private:
     friend struct Accel;
     template<typename T> friend struct Drop;
 
-    // todo remove
+    // TODO: REMOVE
     friend struct Pipeline;
 
     using Resource = std::variant<Buffer, Image, ImageView, Shader, Framebuffer, Sampler, Accel>;
@@ -396,8 +460,7 @@ private:
     friend Manager& vk();
 };
 
-template<typename T>
-Drop<T>::~Drop() {
+template<typename T> Drop<T>::~Drop() {
     vk().drop(std::move(resource));
 }
 

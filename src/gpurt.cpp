@@ -2,11 +2,22 @@
 #include "gpurt.h"
 #include <imgui/imgui.h>
 #include <nfd/nfd.h>
+#include <util/image.h>
 
 GPURT::GPURT(Window& window, std::string scene_file) : window(window), cam(window.drawable()) {
 
     scene.load(Scene::Load_Opts(), scene_file, cam);
     build_accel();
+
+    Util::Image img = Util::Image::load("numbat.jpg").value();
+    output->recreate(img.w(), img.h(), VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
+                     VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                     VMA_MEMORY_USAGE_GPU_ONLY);
+
+    // output->transition(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    // output->write(img);
+
+    output_view->recreate(output, VK_IMAGE_ASPECT_COLOR_BIT);
 }
 
 GPURT::~GPURT() {
@@ -14,13 +25,7 @@ GPURT::~GPURT() {
 
 void GPURT::render() {
 
-    VK::Manager& vk = VK::vk();
-
-    vk.pipeline->update_uniforms(cam);
-
-    VkCommandBuffer cmds = vk.begin_secondary();
-
-    scene.for_objs([&](const Object& obj) { obj.mesh().render(*vk.pipeline, cmds); });
+    VK::vk().end_frame(output_view);
 }
 
 void GPURT::render_ui() {
@@ -185,9 +190,8 @@ void GPURT::loop() {
         }
 
         window.begin_frame();
-        render();
         render_ui();
-        window.complete_frame();
+        render();
     }
 }
 

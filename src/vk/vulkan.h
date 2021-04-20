@@ -2,6 +2,7 @@
 #pragma once
 
 #include <array>
+#include <functional>
 #include <mutex>
 #include <unordered_map>
 #include <variant>
@@ -39,10 +40,10 @@ struct ImageView;
 struct Sampler;
 struct Shader;
 struct Framebuffer;
-struct BLAS;
+struct Accel;
 
-struct Pipeline;
 struct Mesh;
+struct MeshPipe;
 
 Manager& vk();
 std::string vk_err_str(VkResult errorCode);
@@ -95,19 +96,20 @@ struct Image {
 
     void transition(VkImageLayout new_l);
     void transition(VkCommandBuffer& cmds, VkImageLayout new_l);
+    void transition(VkCommandBuffer& cmds, VkImageLayout old_l, VkImageLayout new_l);
 
     void write(Util::Image& img);
 
     VkImage img = VK_NULL_HANDLE;
-
-private:
     unsigned int w = 0;
     unsigned int h = 0;
     VkFormat format = {};
+    VkImageLayout layout = {};
+
+private:
     VkImageTiling tiling = {};
     VkImageUsageFlags img_usage = {};
     VmaMemoryUsage mem_usage = {};
-    VkImageLayout layout = {};
     VmaAllocation mem = VK_NULL_HANDLE;
 
     friend struct Buffer;
@@ -117,7 +119,7 @@ private:
 struct ImageView {
 
     ImageView() = default;
-    ImageView(const Image& image, VkImageAspectFlags aspect);
+    ImageView(Image& image, VkImageAspectFlags aspect);
     ~ImageView();
 
     ImageView(const ImageView&) = delete;
@@ -125,14 +127,23 @@ struct ImageView {
     ImageView& operator=(const ImageView&) = delete;
     ImageView& operator=(ImageView&& src);
 
-    void recreate(const Image& image, VkImageAspectFlags aspect);
+    void recreate(Image& image, VkImageAspectFlags aspect);
     void recreate(VkImage image, VkFormat format, VkImageAspectFlags aspect);
     void destroy();
+
+    const Image& img() const {
+        assert(image);
+        return *image;
+    }
+    Image& img() {
+        assert(image);
+        return *image;
+    }
 
     VkImageView view = VK_NULL_HANDLE;
 
 private:
-    const Image* image = nullptr;
+    Image* image = nullptr;
     VkImageAspectFlags aspect = {};
 };
 
@@ -170,10 +181,41 @@ struct Shader {
     VkShaderModule shader = VK_NULL_HANDLE;
 };
 
+struct Pass {
+
+    struct Subpass {
+        VkPipelineBindPoint bind = {};
+        VkAttachmentReference depth = {};
+        std::vector<VkAttachmentReference> color;
+    };
+    struct Info {
+        std::vector<VkAttachmentDescription> attachments;
+        std::vector<Subpass> subpasses;
+        std::vector<VkSubpassDependency> dependencies;
+    };
+
+    Pass() = default;
+    Pass(const Info& info);
+    ~Pass();
+
+    Pass(const Pass&) = delete;
+    Pass(Pass&& src);
+    Pass& operator=(const Pass&) = delete;
+    Pass& operator=(Pass&& src);
+
+    void begin(VkCommandBuffer& cmds, Framebuffer& fb, const std::vector<VkClearValue>& clears);
+    void end(VkCommandBuffer& cmds);
+
+    void recreate(const Info& info);
+    void destroy();
+
+    VkRenderPass pass = {};
+};
+
 struct Framebuffer {
 
     Framebuffer() = default;
-    Framebuffer(unsigned int width, unsigned int height, VkRenderPass pass,
+    Framebuffer(unsigned int width, unsigned int height, const Pass& pass,
                 const std::vector<std::reference_wrapper<ImageView>>& views);
     ~Framebuffer();
 
@@ -182,57 +224,17 @@ struct Framebuffer {
     Framebuffer& operator=(const Framebuffer&) = delete;
     Framebuffer& operator=(Framebuffer&& src);
 
-    void recreate(unsigned int width, unsigned int height, VkRenderPass pass,
+    void recreate(unsigned int width, unsigned int height, const Pass& pass,
                   const std::vector<std::reference_wrapper<ImageView>>& views);
     void destroy();
 
     unsigned int w = 0;
     unsigned int h = 0;
     VkFramebuffer buf = VK_NULL_HANDLE;
-};
-
-struct Pass {
-
-    Pass() = default;
-    ~Pass();
-
-    Pass(const Pass&) = delete;
-    Pass(Pass&& src);
-    Pass& operator=(const Pass&) = delete;
-    Pass& operator=(Pass&& src);
-
-    void recreate();
-    void destroy();
-
-    VkRenderPass pass = VK_NULL_HANDLE;
-};
-
-template<typename T> struct Drop {
-
-    Drop() = default;
-    ~Drop();
-
-    Drop(const Drop&) = delete;
-    Drop(Drop&& src) = default;
-    Drop& operator=(const Drop&) = delete;
-    Drop& operator=(Drop&& src) = default;
-
-    T* operator->() {
-        return &resource;
-    }
-    const T* operator->() const {
-        return &resource;
-    }
-
-    operator T&() {
-        return resource;
-    }
-    operator T const &() const {
-        return resource;
-    }
 
 private:
-    T resource;
+    void recreate(unsigned int width, unsigned int height, VkRenderPass pass,
+                  const std::vector<std::reference_wrapper<ImageView>>& views);
     friend class Manager;
 };
 
@@ -265,17 +267,65 @@ private:
     VkAccelerationStructureBuildSizesInfoKHR size = {};
 };
 
+struct PipeData {
+
+    PipeData() = default;
+    ~PipeData();
+
+    PipeData(const PipeData&) = delete;
+    PipeData(PipeData&& src);
+    PipeData& operator=(const PipeData&) = delete;
+    PipeData& operator=(PipeData&& src);
+
+    void destroy_swap();
+    void destroy();
+
+    VkPipeline pipe = {};
+    VkPipelineLayout p_layout = {};
+    VkDescriptorSetLayout d_layout = {};
+    std::vector<VkDescriptorSet> descriptor_sets;
+};
+
+template<typename T> struct Drop {
+
+    Drop() = default;
+    ~Drop();
+
+    Drop(const Drop&) = delete;
+    Drop(Drop&& src) = default;
+    Drop& operator=(const Drop&) = delete;
+    Drop& operator=(Drop&& src) = default;
+
+    T* operator->() {
+        return &resource;
+    }
+    const T* operator->() const {
+        return &resource;
+    }
+
+    operator T&() {
+        return resource;
+    }
+    operator T const &() const {
+        return resource;
+    }
+
+private:
+    T resource;
+    friend class Manager;
+};
+
 class Manager {
 public:
     void init(SDL_Window* window);
     void destroy();
 
     void begin_frame();
-    void end_frame(const ImageView& img);
+    void end_frame(ImageView& img);
 
     void trigger_resize();
 
-    VkCommandBuffer begin_secondary(const Framebuffer& fb, const Pass& pass);
+    VkCommandBuffer begin();
     unsigned int frame() const;
 
     template<typename T> void drop(T&& resource) {
@@ -283,9 +333,47 @@ public:
         erase_queue[current_frame].push_back({std::move(resource)});
     }
 
+    VkDevice device() const {
+        return gpu.device;
+    }
+
+    VkDescriptorPool pool() const {
+        return descriptor_pool;
+    }
+
+    VkExtent2D extent() const {
+        return swapchain.extent;
+    }
+
+    template<typename F> void on_resize(F&& f) {
+        resize_callbacks.push_back(std::forward<F&&>(f));
+    }
+
+    VkFormat find_depth_format();
+
+    static constexpr unsigned int MAX_IN_FLIGHT = 2;
+
+    struct RTX {
+        PFN_vkGetPhysicalDeviceProperties2KHR vkGetPhysicalDeviceProperties2;
+        PFN_vkCreateAccelerationStructureKHR vkCreateAccelerationStructureKHR;
+        PFN_vkDestroyAccelerationStructureKHR vkDestroyAccelerationStructureKHR;
+        PFN_vkGetAccelerationStructureBuildSizesKHR vkGetAccelerationStructureBuildSizesKHR;
+        PFN_vkCmdBuildAccelerationStructuresKHR vkCmdBuildAccelerationStructuresKHR;
+        PFN_vkGetAccelerationStructureDeviceAddressKHR vkGetAccelerationStructureDeviceAddressKHR;
+        PFN_vkCreateRayTracingPipelinesKHR vkCreateRayTracingPipelinesKHR;
+    };
+    RTX rtx;
+
 private:
     Manager() = default;
     ~Manager() = default;
+
+    struct Info {
+        VkInstance instance = {};
+        std::vector<VkExtensionProperties> extensions;
+        std::vector<const char*> inst_ext, dev_ext, layers;
+        VkDebugUtilsMessengerEXT debug_callback_info = {};
+    };
 
     struct GPU {
         VkPhysicalDevice device = {};
@@ -304,21 +392,6 @@ private:
 
         int graphics_idx = 0, present_idx = 0;
         bool supports(const std::vector<const char*>& extensions);
-    };
-
-    struct Info {
-        VkInstance instance = {};
-        std::vector<VkExtensionProperties> extensions;
-        std::vector<const char*> inst_ext, dev_ext, layers;
-        VkDebugUtilsMessengerEXT debug_callback_info = {};
-
-        PFN_vkGetPhysicalDeviceProperties2KHR vkGetPhysicalDeviceProperties2;
-        PFN_vkCreateAccelerationStructureKHR vkCreateAccelerationStructureKHR;
-        PFN_vkDestroyAccelerationStructureKHR vkDestroyAccelerationStructureKHR;
-        PFN_vkGetAccelerationStructureBuildSizesKHR vkGetAccelerationStructureBuildSizesKHR;
-        PFN_vkCmdBuildAccelerationStructuresKHR vkCmdBuildAccelerationStructuresKHR;
-        PFN_vkGetAccelerationStructureDeviceAddressKHR vkGetAccelerationStructureDeviceAddressKHR;
-        PFN_vkCreateRayTracingPipelinesKHR vkCreateRayTracingPipelinesKHR;
     };
 
     struct Swapchain_Slot {
@@ -343,9 +416,8 @@ private:
     struct Frame {
         VkFence fence;
         VkSemaphore avail, finish;
-        VkCommandBuffer primary;
-        std::vector<VkCommandBuffer> secondary;
-        static constexpr unsigned int MAX_IN_FLIGHT = 2;
+        VkCommandBuffer composite;
+        std::vector<VkCommandBuffer> buffers;
     };
 
     using Frames = std::vector<Frame>;
@@ -363,7 +435,7 @@ private:
         void create_swap();
         void destroy_swap();
 
-        void composite(VkCommandBuffer& cmds, const ImageView& img);
+        void composite(VkCommandBuffer& cmds, ImageView& img);
         VkRenderPass get_pass() {
             return pass;
         }
@@ -428,9 +500,8 @@ private:
 
     VkCommandBuffer begin_one_time();
     void end_one_time(VkCommandBuffer cmds);
-    void submit_frame(const ImageView& img);
+    void submit_frame(ImageView& img);
 
-    VkFormat find_depth_format();
     VkExtent2D choose_surface_extent();
     unsigned int choose_memory_type(unsigned int filter, VkMemoryPropertyFlags properties);
     VkFormat choose_supported_format(const std::vector<VkFormat>& formats, VkImageTiling tiling,
@@ -448,9 +519,12 @@ private:
     // TODO: REMOVE
     friend struct Pipeline;
 
-    using Resource = std::variant<Buffer, Image, ImageView, Shader, Framebuffer, Sampler, Accel>;
-    std::vector<Resource> erase_queue[Frame::MAX_IN_FLIGHT];
-    std::mutex erase_mut[Frame::MAX_IN_FLIGHT];
+    using Resource =
+        std::variant<Buffer, Image, ImageView, Shader, Framebuffer, Sampler, Accel, Pass, PipeData>;
+    std::vector<Resource> erase_queue[MAX_IN_FLIGHT];
+    std::mutex erase_mut[MAX_IN_FLIGHT];
+
+    std::vector<std::function<void()>> resize_callbacks;
 
     void do_erase() {
         std::lock_guard<std::mutex> lock(erase_mut[current_frame]);

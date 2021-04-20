@@ -29,9 +29,12 @@ public:
     template<typename F> void for_objs(F&& func) {
         for(auto& obj : objs) func(obj.second);
     }
+    template<typename F> void for_objs(F&& func) const {
+        for(auto& obj : objs) func(obj.second);
+    }
 
     bool empty();
-    size_t size();
+    size_t size() const;
     void clear();
     void erase(unsigned int id);
     unsigned int add(Object&& obj);

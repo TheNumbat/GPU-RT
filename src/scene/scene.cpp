@@ -28,7 +28,7 @@ void Scene::erase(unsigned int id) {
     objs.erase(id);
 }
 
-size_t Scene::size() {
+size_t Scene::size() const {
     return objs.size();
 }
 

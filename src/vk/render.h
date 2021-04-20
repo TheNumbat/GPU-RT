@@ -11,6 +11,10 @@ class Scene;
 
 namespace VK {
 
+struct Cam_Uniforms {
+    alignas(16) Mat4 V, P, iV, iP;
+};
+
 struct Mesh {
     typedef unsigned int Index;
     struct Vertex {
@@ -32,7 +36,7 @@ struct Mesh {
     Mesh& operator=(Mesh&& src);
 
     void recreate(std::vector<Vertex>&& vertices, std::vector<Index>&& indices);
-    void render(const Pipeline& pipe, VkCommandBuffer cmds) const;
+    void render(VkCommandBuffer& cmds, const PipeData& pipe, const Mat4& T = Mat4::I) const;
     void sync() const;
 
 private:
@@ -42,11 +46,37 @@ private:
     mutable bool dirty = false;
 
     friend struct Accel;
-    friend struct Pipeline;
+    friend struct MeshPipe;
+    friend struct RTPipe;
 };
 
-struct Uniforms {
-    alignas(16) Mat4 M, V, P;
+struct MeshPipe {
+
+    MeshPipe() = default;
+    MeshPipe(const Pass& pass, VkExtent2D ext);
+    ~MeshPipe();
+
+    MeshPipe(const MeshPipe&) = delete;
+    MeshPipe(MeshPipe&& src) = default;
+    MeshPipe& operator=(const MeshPipe&) = delete;
+    MeshPipe& operator=(MeshPipe&& src) = default;
+
+    void recreate(const Pass& pass, VkExtent2D ext);
+    void destroy();
+
+    void recreate_swap(const Pass& pass, VkExtent2D ext);
+
+    void update_uniforms(const Camera& cam);
+
+    Drop<PipeData> pipe;
+
+private:
+    friend struct Mesh;
+
+    std::vector<Drop<Buffer>> camera_uniforms;
+
+    void create_pipe(const Pass& pass, VkExtent2D ext);
+    void create_desc();
 };
 
 struct RTPipe_Constants {
@@ -56,40 +86,32 @@ struct RTPipe_Constants {
     int lightType;
 };
 
-struct Pipeline {
+struct RTPipe {
 
-    //     // TODO: finish extracting this from Manager
-    //     // Manager needs its own pipeline for final compositing
-    //     // and this one should be more abstract...
-    //     Pipeline() { create_depth_buf(); }
+    RTPipe() = default;
+    RTPipe(const Scene& scene);
+    ~RTPipe();
 
-    //     void init(Scene& scene, Accel& tlas);
-    //     void destroy();
-    //     void destroy_swap();
+    RTPipe(const RTPipe&) = delete;
+    RTPipe(RTPipe&& src) = default;
+    RTPipe& operator=(const RTPipe&) = delete;
+    RTPipe& operator=(RTPipe&& src) = default;
 
-    //     VkPipeline graphics_pipeline;
-    //     VkPipelineLayout pipeline_layout;
+    void recreate(const Scene& scene);
+    void destroy();
 
-    //     VkPipeline rt_pipeline;
-    //     VkPipelineLayout rt_pipeline_layout;
+    void recreate_swap(const Scene& scene);
+    void update_uniforms(const Camera& cam);
+    void use_accel(const Accel& tlas);
+    void use_images(const std::vector<std::reference_wrapper<ImageView>>& out);
 
-    //     VkDescriptorSetLayout descriptor_layout;
-    //     VkDescriptorSetLayout rt_descriptor_layout;
+    Drop<PipeData> pipe;
 
-    //     std::vector<Buffer> uniform_buffers;
-    //     std::vector<VkDescriptorSet> descriptor_sets;
-    //     std::vector<VkDescriptorSet> rt_descriptor_sets;
+private:
+    std::vector<Drop<Buffer>> camera_uniforms;
 
-    //     Image depth_image;
-    //     ImageView depth_view;
-    //     void update_uniforms(const Camera& cam);
-    //     void create_pipeline();
-    //     void create_depth_buf();
-    //     void create_uniform_buffers();
-    //     void create_rt_pipeline();
-    //     void create_descriptor_sets(Scene& scene);
-    //     void create_descriptor_set_layout(Scene& scene);
-    //     void create_rt_descriptor_set(Accel& tlas);
+    void create_pipe();
+    void create_desc(const Scene& scene);
 };
 
 } // namespace VK

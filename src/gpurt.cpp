@@ -7,17 +7,18 @@
 GPURT::GPURT(Window& window, std::string scene_file) : window(window), cam(window.drawable()) {
 
     scene.load(Scene::Load_Opts(), scene_file, cam);
+
+    build_images();
+    build_pass();
+    build_pipe();
+    build_rt();
     build_accel();
 
-    Util::Image img = Util::Image::load("numbat.jpg").value();
-    output->recreate(img.w(), img.h(), VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
-                     VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-                     VMA_MEMORY_USAGE_GPU_ONLY);
-
-    // output->transition(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    // output->write(img);
-
-    output_view->recreate(output, VK_IMAGE_ASPECT_COLOR_BIT);
+    VK::vk().on_resize([this]() {
+        build_images();
+        build_pass();
+        build_pipe();
+    });
 }
 
 GPURT::~GPURT() {
@@ -25,11 +26,121 @@ GPURT::~GPURT() {
 
 void GPURT::render() {
 
-    VK::vk().end_frame(output_view);
+    VK::Manager& vk = VK::vk();
+    Frame& f = frames[vk.frame()];
+
+    VkCommandBuffer cmds = vk.begin();
+
+    VkClearValue col, depth;
+    col.color = {0.22f, 0.22f, 0.22f, 1.0f};
+    depth.depthStencil = {0.0f, 0};
+
+    mesh_pipe.update_uniforms(cam);
+
+    mesh_pass->begin(cmds, f.fb, {col, depth});
+
+    scene.for_objs([&, this](const Object& obj) {
+        obj.mesh().render(cmds, mesh_pipe.pipe, obj.pose.transform());
+    });
+
+    mesh_pass->end(cmds);
+
+    vk.end_frame(frames[vk.frame()].color_view);
 }
 
-void GPURT::render_ui() {
-    UIsidebar();
+void GPURT::build_pass() {
+
+    VkAttachmentDescription color = {};
+    color.format = frames[0].color->format;
+    color.samples = VK_SAMPLE_COUNT_1_BIT;
+    color.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    color.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    color.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    color.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    color.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    VkAttachmentDescription depth = {};
+    depth.format = frames[0].depth->format;
+    depth.samples = VK_SAMPLE_COUNT_1_BIT;
+    depth.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depth.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depth.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    depth.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depth.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    depth.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentReference color_ref = {};
+    color_ref.attachment = 0;
+    color_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    VkAttachmentReference depth_ref = {};
+    depth_ref.attachment = 1;
+    depth_ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDependency d0 = {}, d1 = {};
+    d0.srcSubpass = VK_SUBPASS_EXTERNAL;
+    d0.dstSubpass = 0;
+    d0.srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    d0.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    d0.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    d0.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    d0.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+    d1.srcSubpass = 0;
+    d1.dstSubpass = VK_SUBPASS_EXTERNAL;
+    d1.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    d1.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    d1.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    d1.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    d1.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+    VK::Pass::Subpass sp;
+    sp.bind = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    sp.color = {color_ref};
+    sp.depth = depth_ref;
+
+    mesh_pass->recreate({{color, depth}, {sp}, {d0, d1}});
+}
+
+void GPURT::build_images() {
+
+    VK::Manager& vk = VK::vk();
+    VkExtent2D ext = vk.extent();
+    for(Frame& f : frames) {
+
+        f.color->recreate(ext.width, ext.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_TILING_OPTIMAL,
+                          VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+                          VMA_MEMORY_USAGE_GPU_ONLY);
+        f.depth->recreate(ext.width, ext.height, vk.find_depth_format(), VK_IMAGE_TILING_OPTIMAL,
+                          VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+
+        f.color->transition(VK_IMAGE_LAYOUT_GENERAL);
+
+        f.color_view->recreate(f.color, VK_IMAGE_ASPECT_COLOR_BIT);
+        f.depth_view->recreate(f.depth, VK_IMAGE_ASPECT_DEPTH_BIT);
+    }
+}
+
+void GPURT::build_pipe() {
+
+    VK::Manager& vk = VK::vk();
+    VkExtent2D ext = vk.extent();
+
+    mesh_pipe.recreate(mesh_pass, ext);
+    rt_pipe.recreate(scene);
+
+    for(Frame& f : frames) {
+        std::vector<std::reference_wrapper<VK::ImageView>> views = {f.color_view, f.depth_view};
+        f.fb->recreate(ext.width, ext.height, mesh_pass, views);
+    }
+}
+
+void GPURT::build_rt() {
+    rt_pipe.recreate(scene);
+
+    std::vector<std::reference_wrapper<VK::ImageView>> views;
+    for(auto& f : frames)
+        views.push_back(f.color_view);
+    rt_pipe.use_images(views);
 }
 
 void GPURT::build_accel() {
@@ -41,6 +152,7 @@ void GPURT::build_accel() {
     });
 
     TLAS.recreate(BLAS, BLAS_T);
+    rt_pipe.use_accel(TLAS);
 }
 
 void GPURT::load_scene(bool clear) {
@@ -190,7 +302,7 @@ void GPURT::loop() {
         }
 
         window.begin_frame();
-        render_ui();
+        UIsidebar();
         render();
     }
 }

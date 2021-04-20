@@ -17,13 +17,18 @@ public:
 private:
     void event(SDL_Event e);
     void render();
-    void render_ui();
     void apply_window_dim(Vec2 new_dim);
 
     void UIsidebar();
     void load_scene(bool clear);
     void edit_material(Material& opt);
+
+    void build_images();
     void build_accel();
+    void build_frames();
+    void build_pipe();
+    void build_pass();
+    void build_rt();
 
     static inline const char* scene_file_types = "dae,obj,fbx,glb,gltf,3ds,blend,stl,ply";
     static inline const char* image_file_types = "exr,hdr,hdri,jpg,jpeg,png,tga,bmp,psd,gif";
@@ -41,6 +46,14 @@ private:
     std::vector<Mat4> BLAS_T;
     VK::Accel TLAS;
 
-    VK::Drop<VK::Image> output;
-    VK::Drop<VK::ImageView> output_view;
+    struct Frame {
+        VK::Drop<VK::Image> color, depth;
+        VK::Drop<VK::ImageView> color_view, depth_view;
+        VK::Drop<VK::Framebuffer> fb;
+    };
+
+    std::array<Frame, VK::Manager::MAX_IN_FLIGHT> frames;
+    VK::MeshPipe mesh_pipe;
+    VK::RTPipe rt_pipe;
+    VK::Drop<VK::Pass> mesh_pass;
 };

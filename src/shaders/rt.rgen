@@ -1,8 +1,17 @@
 #version 460
 #extension GL_EXT_ray_tracing : require
 
-layout(binding = 0, set = 0) uniform accelerationStructureEXT topLevelAS;
-layout(binding = 1, set = 0, rgba32f) uniform image2D image;
+layout(push_constant) uniform constants
+{
+	mat4 M;
+} pushes;
+
+layout(binding = 0) uniform UniformBufferObject {
+    mat4 V, P, iV, iP;
+} ubo;
+
+layout(binding = 3) uniform accelerationStructureEXT topLevelAS;
+layout(binding = 4, rgba32f) uniform image2D image;
 
 void main()
 {

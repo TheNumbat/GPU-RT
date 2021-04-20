@@ -111,6 +111,8 @@ endfunction(add_shader)
 
 add_shader(fcpw-gpu "out.vert")
 add_shader(fcpw-gpu "out.frag")
+add_shader(fcpw-gpu "mesh.vert")
+add_shader(fcpw-gpu "mesh.frag")
 add_shader(fcpw-gpu "rt.rchit")
 add_shader(fcpw-gpu "rt.rmiss")
 add_shader(fcpw-gpu "rt.rgen")

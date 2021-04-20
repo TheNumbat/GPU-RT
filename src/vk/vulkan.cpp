@@ -150,7 +150,7 @@ VkDeviceAddress Buffer::address() const {
     VkBufferDeviceAddressInfo info = {};
     info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
     info.buffer = buf;
-    return vkGetBufferDeviceAddress(vk().gpu.device, &info);
+    return vkGetBufferDeviceAddress(vk().device(), &info);
 }
 
 void Buffer::copy_to(const Buffer& dst) {
@@ -275,8 +275,12 @@ void Image::transition(VkImageLayout new_l) {
 }
 
 void Image::transition(VkCommandBuffer& cmds, VkImageLayout new_l) {
+    transition(cmds, layout, new_l);
+}
 
-    VkImageLayout old_l = layout;
+void Image::transition(VkCommandBuffer& cmds, VkImageLayout old_l, VkImageLayout new_l) {
+
+    if(old_l == new_l) return;
     layout = new_l;
 
     VkImageMemoryBarrier barrier = {};
@@ -310,6 +314,13 @@ void Image::transition(VkCommandBuffer& cmds, VkImageLayout new_l) {
         src_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
         dst_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 
+    } else if(old_l == VK_IMAGE_LAYOUT_UNDEFINED && new_l == VK_IMAGE_LAYOUT_GENERAL) {
+        
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = 0;
+        src_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        dst_stage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+
     } else if(old_l == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
               new_l == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
 
@@ -335,6 +346,24 @@ void Image::transition(VkCommandBuffer& cmds, VkImageLayout new_l) {
         src_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
         dst_stage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
 
+    } else if(old_l == VK_IMAGE_LAYOUT_UNDEFINED &&
+              new_l == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask =
+            VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        src_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        dst_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+    } else if(old_l == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+              new_l == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+
+        barrier.srcAccessMask =
+            VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        src_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dst_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+
     } else {
         die("Unsupported image layout transition!");
     }
@@ -342,7 +371,7 @@ void Image::transition(VkCommandBuffer& cmds, VkImageLayout new_l) {
     vkCmdPipelineBarrier(cmds, src_stage, dst_stage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
 }
 
-ImageView::ImageView(const Image& image, VkImageAspectFlags aspect) {
+ImageView::ImageView(Image& image, VkImageAspectFlags aspect) {
     recreate(image, aspect);
 }
 
@@ -363,7 +392,7 @@ ImageView& ImageView::operator=(ImageView&& src) {
     return *this;
 }
 
-void ImageView::recreate(const Image& img, VkImageAspectFlags asp) {
+void ImageView::recreate(Image& img, VkImageAspectFlags asp) {
     recreate(img.img, img.format, asp);
     image = &img;
 }
@@ -387,11 +416,11 @@ void ImageView::recreate(VkImage img, VkFormat format, VkImageAspectFlags asp) {
     view_info.subresourceRange.baseArrayLayer = 0;
     view_info.subresourceRange.layerCount = 1;
 
-    VK_CHECK(vkCreateImageView(vk().gpu.device, &view_info, nullptr, &view));
+    VK_CHECK(vkCreateImageView(vk().device(), &view_info, nullptr, &view));
 }
 
 void ImageView::destroy() {
-    if(view) vkDestroyImageView(vk().gpu.device, view, nullptr);
+    if(view) vkDestroyImageView(vk().device(), view, nullptr);
     std::memset(this, 0, sizeof(ImageView));
 }
 
@@ -435,11 +464,11 @@ void Sampler::recreate(VkFilter min, VkFilter mag) {
     sample_info.minLod = 0.0f;
     sample_info.maxLod = 0.0f;
 
-    VK_CHECK(vkCreateSampler(vk().gpu.device, &sample_info, nullptr, &sampler));
+    VK_CHECK(vkCreateSampler(vk().device(), &sample_info, nullptr, &sampler));
 }
 
 void Sampler::destroy() {
-    if(sampler) vkDestroySampler(vk().gpu.device, sampler, nullptr);
+    if(sampler) vkDestroySampler(vk().device(), sampler, nullptr);
     sampler = VK_NULL_HANDLE;
 }
 
@@ -471,15 +500,15 @@ void Shader::recreate(const std::vector<unsigned char>& data) {
     mod_info.codeSize = data.size();
     mod_info.pCode = (const uint32_t*)data.data();
 
-    VK_CHECK(vkCreateShaderModule(vk().gpu.device, &mod_info, nullptr, &shader));
+    VK_CHECK(vkCreateShaderModule(vk().device(), &mod_info, nullptr, &shader));
 }
 
 void Shader::destroy() {
-    if(shader) vkDestroyShaderModule(vk().gpu.device, shader, nullptr);
+    if(shader) vkDestroyShaderModule(vk().device(), shader, nullptr);
     std::memset(this, 0, sizeof(Shader));
 }
 
-Framebuffer::Framebuffer(unsigned int width, unsigned int height, VkRenderPass pass,
+Framebuffer::Framebuffer(unsigned int width, unsigned int height, const Pass& pass,
                          const std::vector<std::reference_wrapper<ImageView>>& views) {
     recreate(width, height, pass, views);
 }
@@ -497,6 +526,11 @@ Framebuffer& Framebuffer::operator=(Framebuffer&& src) {
     std::memcpy(this, &src, sizeof(Framebuffer));
     std::memset(&src, 0, sizeof(Framebuffer));
     return *this;
+}
+
+void Framebuffer::recreate(unsigned int width, unsigned int height, const Pass& pass,
+                           const std::vector<std::reference_wrapper<ImageView>>& ivs) {
+    recreate(width, height, pass.pass, ivs);
 }
 
 void Framebuffer::recreate(unsigned int width, unsigned int height, VkRenderPass pass,
@@ -519,12 +553,120 @@ void Framebuffer::recreate(unsigned int width, unsigned int height, VkRenderPass
     fb_info.height = height;
     fb_info.layers = 1;
 
-    VK_CHECK(vkCreateFramebuffer(vk().gpu.device, &fb_info, nullptr, &buf));
+    VK_CHECK(vkCreateFramebuffer(vk().device(), &fb_info, nullptr, &buf));
 }
 
 void Framebuffer::destroy() {
-    if(buf) vkDestroyFramebuffer(vk().gpu.device, buf, nullptr);
+    if(buf) vkDestroyFramebuffer(vk().device(), buf, nullptr);
     std::memset(this, 0, sizeof(Framebuffer));
+}
+
+Pass::Pass(const Pass::Info& info) {
+    recreate(info);
+}
+
+Pass::~Pass() {
+    destroy();
+}
+
+Pass::Pass(Pass&& src) {
+    *this = std::move(src);
+}
+
+Pass& Pass::operator=(Pass&& src) {
+    destroy();
+    std::memcpy(this, &src, sizeof(Pass));
+    std::memset(&src, 0, sizeof(Pass));
+    return *this;
+}
+
+void Pass::begin(VkCommandBuffer& cmds, Framebuffer& fb, const std::vector<VkClearValue>& clears) {
+
+    VkRenderPassBeginInfo pinfo = {};
+    pinfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    pinfo.renderPass = pass;
+    pinfo.framebuffer = fb.buf;
+    pinfo.renderArea.offset = {0, 0};
+    pinfo.renderArea.extent.width = fb.w;
+    pinfo.renderArea.extent.height = fb.h;
+    pinfo.clearValueCount = clears.size();
+    pinfo.pClearValues = clears.data();
+
+    vkCmdBeginRenderPass(cmds, &pinfo, VK_SUBPASS_CONTENTS_INLINE);
+}
+
+void Pass::end(VkCommandBuffer& cmds) {
+    vkCmdEndRenderPass(cmds);
+}
+
+void Pass::recreate(const Pass::Info& info) {
+
+    destroy();
+
+    std::vector<VkSubpassDescription> subpasses;
+    for(auto& sp : info.subpasses) {
+        VkSubpassDescription subpass = {};
+        subpass.pipelineBindPoint = sp.bind;
+        subpass.colorAttachmentCount = sp.color.size();
+        subpass.pColorAttachments = sp.color.data();
+        if(sp.depth.attachment) subpass.pDepthStencilAttachment = &sp.depth;
+        subpasses.push_back(subpass);
+    }
+
+    VkRenderPassCreateInfo pinfo = {};
+    pinfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    pinfo.attachmentCount = info.attachments.size();
+    pinfo.pAttachments = info.attachments.data();
+    pinfo.subpassCount = subpasses.size();
+    pinfo.pSubpasses = subpasses.data();
+    pinfo.dependencyCount = info.dependencies.size();
+    pinfo.pDependencies = info.dependencies.data();
+
+    VK_CHECK(vkCreateRenderPass(vk().device(), &pinfo, nullptr, &pass));
+}
+
+void Pass::destroy() {
+    if(pass) vkDestroyRenderPass(vk().device(), pass, nullptr);
+    std::memset(this, 0, sizeof(Pass));
+}
+
+PipeData::~PipeData() {
+    destroy();
+}
+
+PipeData::PipeData(PipeData&& src) {
+    *this = std::move(src);
+}
+
+PipeData& PipeData::operator=(PipeData&& src) {
+    destroy();
+    std::memcpy(this, &src, sizeof(PipeData));
+    std::memset(&src, 0, sizeof(PipeData));
+    return *this;
+}
+
+void PipeData::destroy() {
+    destroy_swap();
+    if(descriptor_sets.size()) {
+        vkFreeDescriptorSets(vk().device(), vk().pool(), descriptor_sets.size(),
+                             descriptor_sets.data());
+        descriptor_sets.clear();
+    }
+    if(d_layout) {
+        vkDestroyDescriptorSetLayout(vk().device(), d_layout, nullptr);
+        d_layout = {};
+    }
+}
+
+void PipeData::destroy_swap() {
+    if(pipe) {
+        vkDestroyPipeline(vk().device(), pipe, nullptr);
+        pipe = {};
+    }
+    if(p_layout) {
+        vkDestroyPipelineLayout(vk().device(), p_layout, nullptr);
+        p_layout = {};
+    }
 }
 
 Accel::Accel(const Mesh& mesh) {
@@ -555,7 +697,7 @@ Accel& Accel::operator=(Accel&& src) {
 }
 
 void Accel::destroy() {
-    if(accel) vk().info.vkDestroyAccelerationStructureKHR(vk().gpu.device, accel, nullptr);
+    if(accel) vk().rtx.vkDestroyAccelerationStructureKHR(vk().device(), accel, nullptr);
     abuf.destroy();
     ibuf.destroy();
     flags = {};
@@ -578,7 +720,7 @@ void Accel::recreate(const std::vector<Accel>& blas, const std::vector<Mat4>& T)
         addr.accelerationStructure = blas[i].accel;
 
         VkDeviceAddress blasAddress =
-            vk().info.vkGetAccelerationStructureDeviceAddressKHR(vk().gpu.device, &addr);
+            vk().rtx.vkGetAccelerationStructureDeviceAddressKHR(vk().device(), &addr);
 
         VkAccelerationStructureInstanceKHR as_inst = {};
         Mat4 inst = T[i].T();
@@ -623,9 +765,8 @@ void Accel::recreate(const std::vector<Accel>& blas, const std::vector<Mat4>& T)
     unsigned int count = (unsigned int)instances.size();
     size.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
 
-    vk().info.vkGetAccelerationStructureBuildSizesKHR(
-        vk().gpu.device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &build_info, &count,
-        &size);
+    vk().rtx.vkGetAccelerationStructureBuildSizesKHR(
+        vk().device(), VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &build_info, &count, &size);
 
     abuf.recreate(size.accelerationStructureSize,
                   VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR |
@@ -650,7 +791,7 @@ void Accel::create_and_build(VkAccelerationStructureCreateInfoKHR create_info,
     create_info.buffer = abuf.buf;
 
     VK_CHECK(
-        vk().info.vkCreateAccelerationStructureKHR(vk().gpu.device, &create_info, nullptr, &accel));
+        vk().rtx.vkCreateAccelerationStructureKHR(vk().device(), &create_info, nullptr, &accel));
 
     Buffer scratch(size.buildScratchSize,
                    VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
@@ -662,7 +803,7 @@ void Accel::create_and_build(VkAccelerationStructureCreateInfoKHR create_info,
     VkAccelerationStructureBuildRangeInfoKHR* offsets[] = {&offset};
 
     VkCommandBuffer cmds = vk().begin_one_time();
-    vk().info.vkCmdBuildAccelerationStructuresKHR(cmds, 1, &build_info, offsets);
+    vk().rtx.vkCmdBuildAccelerationStructuresKHR(cmds, 1, &build_info, offsets);
     vk().end_one_time(cmds);
 }
 
@@ -707,8 +848,8 @@ void Accel::recreate(const Mesh& mesh) {
 
     size.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
 
-    vk().info.vkGetAccelerationStructureBuildSizesKHR(
-        vk().gpu.device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &build_info,
+    vk().rtx.vkGetAccelerationStructureBuildSizesKHR(
+        vk().device(), VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &build_info,
         &maxPrimitiveCount, &size);
 
     abuf.recreate(size.accelerationStructureSize,
@@ -752,47 +893,45 @@ void Manager::begin_frame() {
 
     ImGui_ImplVulkan_NewFrame();
 
-    if(frame.secondary.size()) {
-        vkFreeCommandBuffers(gpu.device, command_pool, frame.secondary.size(),
-                             frame.secondary.data());
-        frame.secondary.clear();
+    if(frame.buffers.size()) {
+        vkFreeCommandBuffers(gpu.device, command_pool, frame.buffers.size(), frame.buffers.data());
+        frame.buffers.clear();
     }
 }
 
-void Manager::submit_frame(const ImageView& out_image) {
+void Manager::submit_frame(ImageView& out_image) {
 
     Frame& frame = frames[current_frame];
-    for(VkCommandBuffer& buf : frame.secondary) {
+    for(VkCommandBuffer& buf : frame.buffers) {
         VK_CHECK(vkEndCommandBuffer(buf));
     }
 
-    VK_CHECK(vkResetCommandBuffer(frame.primary, 0));
+    VK_CHECK(vkResetCommandBuffer(frame.composite, 0));
 
     VkCommandBufferBeginInfo begin_info = {};
     begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-    VK_CHECK(vkBeginCommandBuffer(frame.primary, &begin_info));
+    VK_CHECK(vkBeginCommandBuffer(frame.composite, &begin_info));
 
-    if(frame.secondary.size())
-        vkCmdExecuteCommands(frame.primary, frame.secondary.size(), frame.secondary.data());
+    compositor.composite(frame.composite, out_image);
 
-    compositor.composite(frame.primary, out_image);
-
-    VK_CHECK(vkEndCommandBuffer(frame.primary));
-
-    VkSubmitInfo sub_info = {};
-    sub_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    VK_CHECK(vkEndCommandBuffer(frame.composite));
 
     VkSemaphore wait_sems[] = {frame.avail};
     VkSemaphore sig_sems[] = {frame.finish};
     VkPipelineStageFlags wait_stages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 
+    std::vector<VkCommandBuffer> buffers = frame.buffers;
+    buffers.push_back(frame.composite);
+
+    VkSubmitInfo sub_info = {};
+    sub_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     sub_info.waitSemaphoreCount = 1;
     sub_info.pWaitSemaphores = wait_sems;
     sub_info.pWaitDstStageMask = wait_stages;
-    sub_info.commandBufferCount = 1;
-    sub_info.pCommandBuffers = &frame.primary;
+    sub_info.commandBufferCount = buffers.size();
+    sub_info.pCommandBuffers = buffers.data();
     sub_info.signalSemaphoreCount = 1;
     sub_info.pSignalSemaphores = sig_sems;
 
@@ -812,7 +951,7 @@ void Manager::trigger_resize() {
     needs_resize = true;
 }
 
-void Manager::end_frame(const ImageView& img) {
+void Manager::end_frame(ImageView& img) {
 
     submit_frame(img);
 
@@ -839,42 +978,37 @@ void Manager::end_frame(const ImageView& img) {
     VkResult result = vkQueuePresentKHR(gpu.present_queue, &present_info);
     if(result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || needs_resize) {
         recreate_swapchain();
+        current_frame = 0;
+        return;
     } else if(result != VK_SUCCESS) {
         die("Failed to present swapchain image: %s", vk_err_str(result).c_str());
     }
 
-    current_frame = (current_frame + 1) % Frame::MAX_IN_FLIGHT;
+    current_frame = (current_frame + 1) % MAX_IN_FLIGHT;
 }
 
 unsigned int Manager::frame() const {
     return current_frame;
 }
 
-VkCommandBuffer Manager::begin_secondary(const Framebuffer& fb, const Pass& pass) {
+VkCommandBuffer Manager::begin() {
 
     VkCommandBufferAllocateInfo alloc_info = {};
     alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    alloc_info.level = VK_COMMAND_BUFFER_LEVEL_SECONDARY;
+    alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     alloc_info.commandPool = command_pool;
     alloc_info.commandBufferCount = 1;
 
     VkCommandBuffer command_buffer;
     vkAllocateCommandBuffers(gpu.device, &alloc_info, &command_buffer);
 
-    VkCommandBufferInheritanceInfo inherit_info = {};
-    inherit_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
-    inherit_info.framebuffer = fb.buf;
-    inherit_info.renderPass = pass.pass;
-    inherit_info.subpass = 0;
-
     VkCommandBufferBeginInfo begin_info = {};
     begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     begin_info.flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
-    begin_info.pInheritanceInfo = &inherit_info;
 
     VK_CHECK(vkBeginCommandBuffer(command_buffer, &begin_info));
 
-    frames[current_frame].secondary.push_back(command_buffer);
+    frames[current_frame].buffers.push_back(command_buffer);
     return command_buffer;
 }
 
@@ -917,6 +1051,9 @@ void Manager::recreate_swapchain() {
 
     ImGui_ImplVulkan_Shutdown();
     init_imgui();
+
+    for(auto& f : resize_callbacks) f();
+
     needs_resize = false;
 }
 
@@ -1022,11 +1159,6 @@ VkCommandBuffer Manager::begin_one_time() {
 void Manager::destroy_swapchain() {
 
     compositor.destroy_swap();
-
-    for(Swapchain_Slot& image : swapchain.slots) {
-        image.view.destroy();
-    }
-
     vkDestroySwapchainKHR(gpu.device, swapchain.swapchain, nullptr);
     swapchain.slots.clear();
 }
@@ -1035,7 +1167,7 @@ void Manager::destroy() {
 
     VK_CHECK(vkDeviceWaitIdle(gpu.device));
 
-    for(unsigned int i = 0; i < Frame::MAX_IN_FLIGHT; i++) {
+    for(unsigned int i = 0; i < MAX_IN_FLIGHT; i++) {
         erase_queue[i].clear();
     }
 
@@ -1049,11 +1181,11 @@ void Manager::destroy() {
         vkDestroySemaphore(gpu.device, frame.avail, nullptr);
         vkDestroySemaphore(gpu.device, frame.finish, nullptr);
 
-        if(frame.secondary.size())
-            vkFreeCommandBuffers(gpu.device, command_pool, frame.secondary.size(),
-                                 frame.secondary.data());
+        if(frame.buffers.size())
+            vkFreeCommandBuffers(gpu.device, command_pool, frame.buffers.size(),
+                                 frame.buffers.data());
 
-        vkFreeCommandBuffers(gpu.device, command_pool, 1, &frame.primary);
+        vkFreeCommandBuffers(gpu.device, command_pool, 1, &frame.composite);
     }
     frames.clear();
 
@@ -1121,51 +1253,51 @@ static VkBool32 debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT sev,
 
 void Manager::init_rt() {
 
-    info.vkGetPhysicalDeviceProperties2 =
+    rtx.vkGetPhysicalDeviceProperties2 =
         (PFN_vkGetPhysicalDeviceProperties2KHR)vkGetInstanceProcAddr(
             info.instance, "vkGetPhysicalDeviceProperties2");
 
-    if(!info.vkGetPhysicalDeviceProperties2) die("Failed to load vkGetPhysicalDeviceProperties2");
+    if(!rtx.vkGetPhysicalDeviceProperties2) die("Failed to load vkGetPhysicalDeviceProperties2");
 
-    info.vkCreateAccelerationStructureKHR =
+    rtx.vkCreateAccelerationStructureKHR =
         (PFN_vkCreateAccelerationStructureKHR)vkGetInstanceProcAddr(
             info.instance, "vkCreateAccelerationStructureKHR");
 
-    if(!info.vkCreateAccelerationStructureKHR)
+    if(!rtx.vkCreateAccelerationStructureKHR)
         die("Failed to load vkCreateAccelerationStructureKHR");
 
-    info.vkDestroyAccelerationStructureKHR =
+    rtx.vkDestroyAccelerationStructureKHR =
         (PFN_vkDestroyAccelerationStructureKHR)vkGetInstanceProcAddr(
             info.instance, "vkDestroyAccelerationStructureKHR");
 
-    if(!info.vkDestroyAccelerationStructureKHR)
+    if(!rtx.vkDestroyAccelerationStructureKHR)
         die("Failed to load vkDestroyAccelerationStructureKHR");
 
-    info.vkGetAccelerationStructureBuildSizesKHR =
+    rtx.vkGetAccelerationStructureBuildSizesKHR =
         (PFN_vkGetAccelerationStructureBuildSizesKHR)vkGetInstanceProcAddr(
             info.instance, "vkGetAccelerationStructureBuildSizesKHR");
 
-    if(!info.vkGetAccelerationStructureBuildSizesKHR)
+    if(!rtx.vkGetAccelerationStructureBuildSizesKHR)
         die("Failed to load vkGetAccelerationStructureBuildSizesKHR");
 
-    info.vkCmdBuildAccelerationStructuresKHR =
+    rtx.vkCmdBuildAccelerationStructuresKHR =
         (PFN_vkCmdBuildAccelerationStructuresKHR)vkGetInstanceProcAddr(
             info.instance, "vkCmdBuildAccelerationStructuresKHR");
 
-    if(!info.vkCmdBuildAccelerationStructuresKHR)
+    if(!rtx.vkCmdBuildAccelerationStructuresKHR)
         die("Failed to load vkCmdBuildAccelerationStructuresKHR");
 
-    info.vkGetAccelerationStructureDeviceAddressKHR =
+    rtx.vkGetAccelerationStructureDeviceAddressKHR =
         (PFN_vkGetAccelerationStructureDeviceAddressKHR)vkGetInstanceProcAddr(
             info.instance, "vkGetAccelerationStructureDeviceAddressKHR");
 
-    if(!info.vkGetAccelerationStructureDeviceAddressKHR)
+    if(!rtx.vkGetAccelerationStructureDeviceAddressKHR)
         die("Failed to load vkGetAccelerationStructureDeviceAddressKHR");
 
-    info.vkCreateRayTracingPipelinesKHR = (PFN_vkCreateRayTracingPipelinesKHR)vkGetInstanceProcAddr(
+    rtx.vkCreateRayTracingPipelinesKHR = (PFN_vkCreateRayTracingPipelinesKHR)vkGetInstanceProcAddr(
         info.instance, "vkCreateRayTracingPipelinesKHR");
 
-    if(!info.vkCreateRayTracingPipelinesKHR) die("Failed to load vkCreateRayTracingPipelinesKHR");
+    if(!rtx.vkCreateRayTracingPipelinesKHR) die("Failed to load vkCreateRayTracingPipelinesKHR");
 }
 
 void Manager::init_debug_callback() {
@@ -1216,18 +1348,13 @@ VkRenderPassBeginInfo Manager::Compositor::pass_info() {
     return pinfo;
 }
 
-void Manager::Compositor::composite(VkCommandBuffer& cmds, const ImageView& view) {
+void Manager::Compositor::composite(VkCommandBuffer& cmds, ImageView& view) {
 
     update_img(view);
 
-    VkClearValue clear = {};
-    clear.color = {0.22f, 0.22f, 0.22f, 1.0f};
-
     VkRenderPassBeginInfo begin = pass_info();
-    begin.clearValueCount = 1;
-    begin.pClearValues = &clear;
 
-    vkCmdBeginRenderPass(vk().frames[vk().current_frame].primary, &begin,
+    vkCmdBeginRenderPass(vk().frames[vk().current_frame].composite, &begin,
                          VK_SUBPASS_CONTENTS_INLINE);
 
     vkCmdBindPipeline(cmds, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
@@ -1238,7 +1365,7 @@ void Manager::Compositor::composite(VkCommandBuffer& cmds, const ImageView& view
     ImGui::Render();
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmds);
 
-    vkCmdEndRenderPass(vk().frames[vk().current_frame].primary);
+    vkCmdEndRenderPass(vk().frames[vk().current_frame].composite);
 }
 
 void Manager::Compositor::update_img(const ImageView& view) {
@@ -1257,7 +1384,7 @@ void Manager::Compositor::update_img(const ImageView& view) {
     img_write.descriptorCount = 1;
     img_write.pImageInfo = &img_info;
 
-    vkUpdateDescriptorSets(vk().gpu.device, 1, &img_write, 0, nullptr);
+    vkUpdateDescriptorSets(vk().device(), 1, &img_write, 0, nullptr);
 }
 
 void Manager::Compositor::create_desc() {
@@ -1276,27 +1403,25 @@ void Manager::Compositor::create_desc() {
     layout_info.bindingCount = 1;
     layout_info.pBindings = bindings;
 
-    VK_CHECK(vkCreateDescriptorSetLayout(vk().gpu.device, &layout_info, nullptr, &d_layout));
+    VK_CHECK(vkCreateDescriptorSetLayout(vk().device(), &layout_info, nullptr, &d_layout));
 
-    std::vector<VkDescriptorSetLayout> layouts(Frame::MAX_IN_FLIGHT, d_layout);
+    std::vector<VkDescriptorSetLayout> layouts(MAX_IN_FLIGHT, d_layout);
 
     VkDescriptorSetAllocateInfo alloc_info = {};
     alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    alloc_info.descriptorPool = vk().descriptor_pool;
-    alloc_info.descriptorSetCount = Frame::MAX_IN_FLIGHT;
+    alloc_info.descriptorPool = vk().pool();
+    alloc_info.descriptorSetCount = MAX_IN_FLIGHT;
     alloc_info.pSetLayouts = layouts.data();
 
-    descriptor_sets.resize(Frame::MAX_IN_FLIGHT);
-    VK_CHECK(vkAllocateDescriptorSets(vk().gpu.device, &alloc_info, descriptor_sets.data()));
+    descriptor_sets.resize(MAX_IN_FLIGHT);
+    VK_CHECK(vkAllocateDescriptorSets(vk().device(), &alloc_info, descriptor_sets.data()));
 }
 
 void Manager::Compositor::destroy_swap() {
-
-    for(auto& fb : framebuffers) fb.destroy();
-
-    vkDestroyRenderPass(vk().gpu.device, pass, nullptr);
-    vkDestroyPipeline(vk().gpu.device, pipeline, nullptr);
-    vkDestroyPipelineLayout(vk().gpu.device, p_layout, nullptr);
+    framebuffers.clear();
+    vkDestroyRenderPass(vk().device(), pass, nullptr);
+    vkDestroyPipeline(vk().device(), pipeline, nullptr);
+    vkDestroyPipelineLayout(vk().device(), p_layout, nullptr);
     pass = {};
     pipeline = {};
     p_layout = {};
@@ -1304,10 +1429,10 @@ void Manager::Compositor::destroy_swap() {
 
 void Manager::Compositor::destroy() {
     destroy_swap();
-    vkFreeDescriptorSets(vk().gpu.device, vk().descriptor_pool, descriptor_sets.size(),
+    vkFreeDescriptorSets(vk().device(), vk().pool(), descriptor_sets.size(),
                          descriptor_sets.data());
     descriptor_sets.clear();
-    vkDestroyDescriptorSetLayout(vk().gpu.device, d_layout, nullptr);
+    vkDestroyDescriptorSetLayout(vk().device(), d_layout, nullptr);
     sampler.destroy();
 }
 
@@ -1316,7 +1441,10 @@ void Manager::Compositor::create_fbs() {
     Swapchain& swap = vk().swapchain;
     for(size_t i = 0; i < swap.slots.size(); i++) {
         std::vector<std::reference_wrapper<ImageView>> views = {swap.slots[i].view};
-        framebuffers.emplace_back(swap.extent.width, swap.extent.height, pass, views);
+
+        Framebuffer fb;
+        fb.recreate(swap.extent.width, swap.extent.height, pass, views);
+        framebuffers.push_back(std::move(fb));
     }
 }
 
@@ -1416,7 +1544,7 @@ void Manager::Compositor::create_pipe() {
     layout_info.pushConstantRangeCount = 0;
     layout_info.pPushConstantRanges = nullptr;
 
-    VK_CHECK(vkCreatePipelineLayout(vk().gpu.device, &layout_info, nullptr, &p_layout));
+    VK_CHECK(vkCreatePipelineLayout(vk().device(), &layout_info, nullptr, &p_layout));
 
     VkGraphicsPipelineCreateInfo pipeline_info{};
     pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -1434,7 +1562,7 @@ void Manager::Compositor::create_pipe() {
     pipeline_info.subpass = 0;
 
     VK_CHECK(
-        vkCreateGraphicsPipelines(vk().gpu.device, nullptr, 1, &pipeline_info, nullptr, &pipeline));
+        vkCreateGraphicsPipelines(vk().device(), nullptr, 1, &pipeline_info, nullptr, &pipeline));
 }
 
 void Manager::create_instance() {
@@ -1566,7 +1694,7 @@ void Manager::enumerate_gpus() {
             g.prop_2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
             g.prop_2.pNext = &g.rt_prop;
             g.rt_prop.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
-            info.vkGetPhysicalDeviceProperties2(g.device, &g.prop_2);
+            rtx.vkGetPhysicalDeviceProperties2(g.device, &g.prop_2);
         }
         {
             g.features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
@@ -1739,7 +1867,7 @@ void Manager::create_frames() {
     finfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     finfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-    frames.resize(Frame::MAX_IN_FLIGHT);
+    frames.resize(MAX_IN_FLIGHT);
     for(Frame& frame : frames) {
         VK_CHECK(vkCreateSemaphore(gpu.device, &sinfo, nullptr, &frame.avail));
         VK_CHECK(vkCreateSemaphore(gpu.device, &sinfo, nullptr, &frame.finish));
@@ -1751,7 +1879,7 @@ void Manager::create_frames() {
             alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
             alloc_info.commandPool = command_pool;
             alloc_info.commandBufferCount = 1;
-            VK_CHECK(vkAllocateCommandBuffers(gpu.device, &alloc_info, &frame.primary));
+            VK_CHECK(vkAllocateCommandBuffers(gpu.device, &alloc_info, &frame.composite));
         }
     }
 }
@@ -1885,7 +2013,7 @@ void Manager::Compositor::create_pass() {
     VkAttachmentDescription color = {};
     color.format = vk().swapchain.format.format;
     color.samples = VK_SAMPLE_COUNT_1_BIT;
-    color.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    color.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     color.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     color.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -1901,23 +2029,16 @@ void Manager::Compositor::create_pass() {
     subpass.colorAttachmentCount = 1;
     subpass.pColorAttachments = &color_ref;
 
-    VkSubpassDependency dependencies[2] = {};
-
-    dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-    dependencies[0].dstSubpass = 0;
-    dependencies[0].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-    dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependencies[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-
-    dependencies[1].srcSubpass = 0;
-    dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-    dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-    dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+    VkSubpassDependency dependency = {};
+    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+    dependency.dstSubpass = 0;
+    dependency.srcStageMask =
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    dependency.srcAccessMask = 0;
+    dependency.dstStageMask =
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    dependency.dstAccessMask =
+        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
     VkAttachmentDescription attachments[] = {color};
 
@@ -1927,10 +2048,10 @@ void Manager::Compositor::create_pass() {
     pinfo.pAttachments = attachments;
     pinfo.subpassCount = 1;
     pinfo.pSubpasses = &subpass;
-    pinfo.dependencyCount = 2;
-    pinfo.pDependencies = dependencies;
+    pinfo.dependencyCount = 1;
+    pinfo.pDependencies = &dependency;
 
-    VK_CHECK(vkCreateRenderPass(vk().gpu.device, &pinfo, nullptr, &pass));
+    VK_CHECK(vkCreateRenderPass(vk().device(), &pinfo, nullptr, &pass));
 }
 
 unsigned int Manager::choose_memory_type(unsigned int filter, VkMemoryPropertyFlags properties) {

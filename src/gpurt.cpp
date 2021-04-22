@@ -227,6 +227,8 @@ void GPURT::UIsidebar() {
                                         {window_dim.x, window_dim.y});
     ImGui::Begin("Menu", nullptr, flags);
 
+    ImGui::Text("FPS: %f", ImGui::GetIO().Framerate);
+
     ImGui::Text("Edit Scene");
     if(ImGui::Button("Open Scene")) load_scene(true);
     if(ImGui::Button("Import Objects")) load_scene(false);

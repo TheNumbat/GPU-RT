@@ -21,7 +21,7 @@ void main() {
 
     const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
     const vec2 inUV = pixelCenter / vec2(gl_LaunchSizeEXT.xy);
-    const vec2 s = vec2(inUV.x,1-inUV.y) * 2.0 - 1.0;
+    const vec2 s = inUV * 2.0 - 1.0;
 
     vec4 origin    = cam.iV * vec4(0, 0, 0, 1);
     vec4 target    = cam.iP * vec4(s, 0, 1);

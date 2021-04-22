@@ -190,7 +190,7 @@ void MeshPipe::create_pipe(const Pass& pass, VkExtent2D ext) {
     raster_info.polygonMode = VK_POLYGON_MODE_FILL;
     raster_info.lineWidth = 1.0f;
     raster_info.cullMode = VK_CULL_MODE_BACK_BIT;
-    raster_info.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    raster_info.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     raster_info.depthBiasEnable = VK_FALSE;
     raster_info.depthBiasConstantFactor = 0.0f; // Optional
     raster_info.depthBiasClamp = 0.0f;          // Optional

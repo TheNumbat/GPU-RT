@@ -33,6 +33,8 @@ void GPURT::render() {
 
     if(use_rt) {
 
+        build_accel();
+
         rt_pipe.use_image(f.rt_target_view);
         rt_pipe.use_accel(TLAS);
         rt_pipe.update_uniforms(cam);
@@ -173,14 +175,25 @@ void GPURT::build_rt() {
 
 void GPURT::build_accel() {
 
-    BLAS.clear();
-    scene.for_objs([this](const Object& obj) {
-        BLAS.push_back({VK::Accel(obj.mesh())});
-        BLAS_T.push_back(obj.pose.transform());
-    });
+    if(rebuild_blas) {
+        BLAS.clear();
+        scene.for_objs([this](const Object& obj) {
+            BLAS.push_back({VK::Accel(obj.mesh())});
+        });
+        rebuild_blas = false;
+    }
 
-    TLAS->recreate(BLAS, BLAS_T);
-    rt_pipe.use_accel(TLAS);
+    if(rebuild_tlas) {
+
+        BLAS_T.clear();
+        scene.for_objs([this](const Object& obj) {
+            BLAS_T.push_back(obj.pose.transform());
+        });
+
+        TLAS.drop();
+        TLAS->recreate(BLAS, BLAS_T);
+        rebuild_tlas = false;
+    }
 }
 
 void GPURT::load_scene(bool clear) {
@@ -198,6 +211,8 @@ void GPURT::load_scene(bool clear) {
 
     scene.load(load_opt, std::string(path), cam);
     free(path);
+
+    rebuild_blas = rebuild_tlas = true;
     build_accel();
 }
 
@@ -259,17 +274,24 @@ void GPURT::UIsidebar() {
             ImGui::Indent();
 
             auto sliders = [](std::string label, Vec3& data, float sens) {
-                ImGui::DragFloat3(label.c_str(), data.data, sens);
+                return ImGui::DragFloat3(label.c_str(), data.data, sens);
             };
 
             pose.clamp_euler();
-            sliders("Position", pose.pos, 0.1f);
-            sliders("Rotation", pose.euler, 1.0f);
-            sliders("Scale", pose.scale, 0.03f);
+
+            bool u = false;
+            u = u || sliders("Position", pose.pos, 0.1f);
+            u = u || sliders("Rotation", pose.euler, 1.0f);
+            u = u || sliders("Scale", pose.scale, 0.03f);
+
             if(ImGui::Button("Delete [del]")) {
                 scene.erase(selected_id);
                 selected_id = 0;
+                rebuild_blas = true;
+                rebuild_tlas = true;
             }
+
+            if(u) rebuild_tlas = true;
 
             ImGui::Unindent();
         }

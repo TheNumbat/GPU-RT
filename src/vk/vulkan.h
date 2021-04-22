@@ -317,6 +317,8 @@ template<typename T> struct Drop {
         return resource;
     }
 
+    void drop();
+
 private:
     T resource;
     friend class Manager;
@@ -544,6 +546,9 @@ private:
 };
 
 template<typename T> Drop<T>::~Drop() {
+    drop();
+}
+template<typename T> void Drop<T>::drop() {
     vk().drop(std::move(resource));
 }
 

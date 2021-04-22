@@ -53,6 +53,8 @@ private:
     };
 
     bool use_rt = true;
+    bool rebuild_tlas = true;
+    bool rebuild_blas = true;
 
     std::array<Frame, VK::Manager::MAX_IN_FLIGHT> frames;
     VK::MeshPipe mesh_pipe;

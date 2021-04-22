@@ -143,7 +143,8 @@ void Buffer::recreate(VkDeviceSize sz, VkBufferUsageFlags busage, VmaMemoryUsage
     VmaAllocationCreateInfo alloc_info = {};
     alloc_info.usage = mem_usage;
 
-    VK_CHECK(vmaCreateBuffer(vk().gpu_alloc, &buf_info, &alloc_info, &buf, &mem, nullptr));
+    if(sz)
+        VK_CHECK(vmaCreateBuffer(vk().gpu_alloc, &buf_info, &alloc_info, &buf, &mem, nullptr));
 }
 
 void* Buffer::map() const {
@@ -157,6 +158,7 @@ void Buffer::unmap() const {
 }
 
 VkDeviceAddress Buffer::address() const {
+    if(!buf) return {};
     VkBufferDeviceAddressInfo info = {};
     info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
     info.buffer = buf;
@@ -193,6 +195,8 @@ void Buffer::to_image(VkCommandBuffer& cmds, const Image& image) {
 }
 
 void Buffer::write(const void* data, size_t dsize) {
+    
+    if(!dsize) return;
     assert(dsize <= size);
 
     void* map;
@@ -203,6 +207,7 @@ void Buffer::write(const void* data, size_t dsize) {
 
 void Buffer::write_staged(const void* data, size_t dsize) {
 
+    if(!dsize) return;
     assert(dsize <= size);
 
     Buffer staging(dsize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);

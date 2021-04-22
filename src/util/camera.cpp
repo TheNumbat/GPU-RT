@@ -58,7 +58,7 @@ void Camera::look_at(Vec3 cent, Vec3 pos) {
 void Camera::reset() {
     vert_fov = 90.0f;
     aspect_ratio = 1.7778f;
-    rot = Quat::euler(Vec3(-45.0f, 45.0f, 0.0f));
+    rot = Quat::euler(Vec3(45.0f, 45.0f, 0.0f));
     near_plane = 0.01f;
     radius = 5.0f;
     radius_sens = 0.25f;
@@ -72,7 +72,7 @@ void Camera::reset() {
 
 void Camera::mouse_orbit(Vec2 off) {
     float up_rot = -off.x * orbit_sens;
-    float right_rot = off.y * orbit_sens;
+    float right_rot = -off.y * orbit_sens;
 
     Vec3 up = rot.rotate(UP);
     Vec3 f = front();
@@ -87,7 +87,7 @@ void Camera::mouse_move(Vec2 off) {
     Vec3 f = front();
     Vec3 right = cross(f, up).unit();
 
-    looking_at += -right * off.x * move_sens + up * off.y * move_sens;
+    looking_at += -right * off.x * move_sens - up * off.y * move_sens;
     update_pos();
 }
 

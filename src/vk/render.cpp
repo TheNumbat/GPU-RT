@@ -190,7 +190,7 @@ void MeshPipe::create_pipe(const Pass& pass, VkExtent2D ext) {
     raster_info.polygonMode = VK_POLYGON_MODE_FILL;
     raster_info.lineWidth = 1.0f;
     raster_info.cullMode = VK_CULL_MODE_BACK_BIT;
-    raster_info.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    raster_info.frontFace = VK_FRONT_FACE_CLOCKWISE;
     raster_info.depthBiasEnable = VK_FALSE;
     raster_info.depthBiasConstantFactor = 0.0f; // Optional
     raster_info.depthBiasClamp = 0.0f;          // Optional
@@ -544,21 +544,21 @@ void RTPipe::create_desc(const Scene& scene) {
     ubo_bind.binding = 0;
     ubo_bind.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     ubo_bind.descriptorCount = 1;
-    ubo_bind.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+    ubo_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
     ubo_bind.pImmutableSamplers = nullptr;
 
     VkDescriptorSetLayoutBinding v_bind = {};
     v_bind.binding = 1;
     v_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     v_bind.descriptorCount = scene.size();
-    v_bind.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+    v_bind.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
     v_bind.pImmutableSamplers = nullptr;
 
     VkDescriptorSetLayoutBinding i_bind = {};
     i_bind.binding = 2;
     i_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     i_bind.descriptorCount = scene.size();
-    i_bind.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+    i_bind.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
     i_bind.pImmutableSamplers = nullptr;
 
     VkDescriptorSetLayoutBinding a_bind = {};

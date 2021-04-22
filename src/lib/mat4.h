@@ -429,7 +429,7 @@ inline Mat4 Mat4::project(float fov, float ar, float n) {
     float f = 1.0f / std::tan(Radians(fov) / 2.0f);
     Mat4 r;
     r[0][0] = f / ar;
-    r[1][1] = -f;
+    r[1][1] = f;
     r[2][2] = 0.0f;
     r[3][3] = 0.0f;
     r[3][2] = n;

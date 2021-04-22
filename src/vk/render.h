@@ -12,7 +12,7 @@ class Scene;
 namespace VK {
 
 struct Cam_Uniforms {
-    alignas(16) Mat4 V, P, iV, iP;
+    Mat4 V, P, iV, iP;
 };
 
 struct Mesh {

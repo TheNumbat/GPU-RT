@@ -749,6 +749,7 @@ void Accel::recreate(const std::vector<Drop<Accel>>& blas, const std::vector<Mat
         as_inst.instanceCustomIndex = i;
         as_inst.accelerationStructureReference = blasAddress;
         as_inst.instanceShaderBindingTableRecordOffset = 0;
+        as_inst.mask = 0xFF;
         as_inst.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
 
         instances.push_back(as_inst);
@@ -789,8 +790,7 @@ void Accel::recreate(const std::vector<Drop<Accel>>& blas, const std::vector<Mat
         vk().device(), VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &build_info, &count, &size);
 
     abuf.recreate(size.accelerationStructureSize,
-                  VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR |
-                      VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                  VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR,
                   VMA_MEMORY_USAGE_GPU_ONLY);
 
     VkAccelerationStructureCreateInfoKHR create_info = {};
@@ -846,7 +846,6 @@ void Accel::recreate(const Mesh& mesh) {
     triangles.indexType = VK_INDEX_TYPE_UINT32;
     triangles.indexData.deviceAddress = i_addr;
     triangles.maxVertex = mesh._verts.size();
-    triangles.transformData = {};
 
     VkAccelerationStructureGeometryKHR geom = {};
     geom.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
@@ -873,8 +872,7 @@ void Accel::recreate(const Mesh& mesh) {
         &maxPrimitiveCount, &size);
 
     abuf.recreate(size.accelerationStructureSize,
-                  VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR |
-                      VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                  VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR,
                   VMA_MEMORY_USAGE_GPU_ONLY);
 
     VkAccelerationStructureCreateInfoKHR create_info = {};
@@ -2107,7 +2105,7 @@ unsigned int Manager::choose_memory_type(unsigned int filter, VkMemoryPropertyFl
 
 void Manager::create_descriptor_pool() {
 
-    std::array<VkDescriptorPoolSize, 11> pool_sizes = {
+    std::array<VkDescriptorPoolSize, 12> pool_sizes = {
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_SAMPLER, 1024},
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1024},
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1024},
@@ -2118,7 +2116,8 @@ void Manager::create_descriptor_pool() {
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1024},
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1024},
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1024},
-        VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1024}};
+        VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1024},
+        VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1024}};
 
     VkDescriptorPoolCreateInfo pool_info = {};
     pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;

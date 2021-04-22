@@ -1,12 +1,12 @@
 
 #version 460
-#extension GL_EXT_ray_tracing : require
-#extension GL_GOOGLE_include_directive : enable
+#extension GL_EXT_ray_tracing : enable
 
-#include "raycommon.glsl"
+layout(location = 0) rayPayloadInEXT vec3 payload;
+hitAttributeEXT vec3 attribs;
 
-layout(location = 0) rayPayloadInEXT hitPayload prd;
-
-void main() {
-    prd.hitValue = vec3(1.0f);
+void main()
+{
+  const vec3 barycentricCoords = vec3(1.0f - attribs.x - attribs.y, attribs.x, attribs.y);
+  payload = barycentricCoords;
 }

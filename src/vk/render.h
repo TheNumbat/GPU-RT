@@ -39,6 +39,9 @@ struct Mesh {
     void render(VkCommandBuffer& cmds, const PipeData& pipe, const Mat4& T = Mat4::I) const;
     void sync() const;
 
+    const std::vector<Vertex>& verts() const { return _verts; }
+    const std::vector<Index>& inds() const { return _idxs; }
+
 private:
     std::vector<Vertex> _verts;
     std::vector<Index> _idxs;

@@ -6,6 +6,7 @@
 #include <scene/scene.h>
 
 #include "platform/window.h"
+#include "vk/compute.h"
 
 class GPURT {
 public:
@@ -17,6 +18,7 @@ public:
 private:
     void event(SDL_Event e);
     void render();
+    void test_cpq(bool print);
     void apply_window_dim(Vec2 new_dim);
 
     void UIsidebar();
@@ -57,7 +59,9 @@ private:
     bool rebuild_blas = true;
 
     std::array<Frame, VK::Manager::MAX_IN_FLIGHT> frames;
+    VK::Drop<VK::Pass> mesh_pass;
+    
     VK::MeshPipe mesh_pipe;
     VK::RTPipe rt_pipe;
-    VK::Drop<VK::Pass> mesh_pass;
+    VK::CPQPipe cpq_pipe;
 };

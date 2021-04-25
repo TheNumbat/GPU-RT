@@ -105,12 +105,13 @@ MeshPipe::MeshPipe(const Pass& pass, VkExtent2D ext) {
 }
 
 void MeshPipe::recreate(const Pass& pass, VkExtent2D ext) {
-    pipe->destroy();
+    pipe.drop();
     create_desc();
     create_pipe(pass, ext);
 }
 
 void MeshPipe::destroy() {
+    pipe.drop();
     camera_uniforms.clear();
 }
 
@@ -339,7 +340,7 @@ RTPipe::RTPipe(const Scene& scene) {
 }
 
 void RTPipe::recreate(const Scene& scene) {
-    pipe->destroy();
+    pipe.drop();
     create_desc(scene);
     create_pipe();
     create_sbt();
@@ -347,6 +348,7 @@ void RTPipe::recreate(const Scene& scene) {
 
 void RTPipe::destroy() {
     camera_uniforms.clear();
+    pipe.drop();
 }
 
 void RTPipe::recreate_swap(const Scene& scene) {

@@ -205,6 +205,17 @@ void Buffer::write(const void* data, size_t dsize) {
     vmaUnmapMemory(vk().gpu_alloc, mem);
 }
 
+void Buffer::read(void* data, size_t dsize) {
+    
+    if(!dsize) return;
+    assert(dsize <= size);
+
+    void* map;
+    VK_CHECK(vmaMapMemory(vk().gpu_alloc, mem, &map));
+    std::memcpy(data, map, dsize);
+    vmaUnmapMemory(vk().gpu_alloc, mem);
+}
+
 void Buffer::write_staged(const void* data, size_t dsize) {
 
     if(!dsize) return;

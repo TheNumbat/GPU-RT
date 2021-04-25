@@ -1,5 +1,7 @@
 
 #include "gpurt.h"
+
+#include <chrono>
 #include <imgui/imgui.h>
 #include <nfd/nfd.h>
 #include <util/image.h>
@@ -19,9 +21,48 @@ GPURT::GPURT(Window& window, std::string scene_file) : window(window), cam(windo
         build_pass();
         build_pipe();
     });
+
+    test_cpq(true);
 }
 
 GPURT::~GPURT() {
+}
+
+void GPURT::test_cpq(bool print) {
+
+    std::vector<Vec4> queries;
+    std::vector<Vec4> reference;
+
+    std::ifstream f_queries("queries.txt");
+    while(f_queries.good()) {
+        Vec4 q;
+        f_queries >> q.x >> q.y >> q.z;
+        if(f_queries.good()) queries.push_back(q);
+    }
+
+    std::ifstream f_cps("points.txt");
+    while(f_cps.good()) {
+        Vec4 q;
+        f_cps >> q.x >> q.y >> q.z;
+        if(f_cps.good()) reference.push_back(q);
+    }
+
+    assert(queries.size() == reference.size());
+
+    auto t1 = std::chrono::high_resolution_clock::now();
+    auto output = cpq_pipe.run(scene.get(1).mesh(), queries);
+    auto t2 = std::chrono::high_resolution_clock::now();
+    auto ms_int = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
+    std::cout << queries.size() << " CPQs done in " << ms_int << std::endl;
+
+    if(print)
+    for(int i = 0; i < queries.size(); i++) {
+        float d_ref = (reference[i].xyz() - queries[i].xyz()).norm();
+        float d_comp = (output[i].xyz() - queries[i].xyz()).norm();
+        if(std::abs(d_ref - d_comp) > EPS_F) {
+            std::cout << "CPQ FAILED: " << reference[i].xyz() << " vs " << output[i].xyz() << std::endl;
+        }
+    }
 }
 
 void GPURT::render() {
@@ -162,6 +203,7 @@ void GPURT::build_pipe() {
 
     mesh_pipe.recreate(mesh_pass, ext);
     rt_pipe.recreate(scene);
+    cpq_pipe.recreate();
 
     for(Frame& f : frames) {
         std::vector<std::reference_wrapper<VK::ImageView>> views = {f.color_view, f.depth_view};

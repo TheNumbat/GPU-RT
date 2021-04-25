@@ -35,7 +35,9 @@ set(SOURCES_CLIENT "src/main.cpp"
                    "src/vk/imgui_impl_vulkan.h"
                    "src/vk/imgui_impl_vulkan.cpp"
                    "src/vk/render.h"
-                   "src/vk/render.cpp")
+                   "src/vk/render.cpp"
+                   "src/vk/compute.h"
+                   "src/vk/compute.cpp")
 
 # setup OS-specific options
 
@@ -116,6 +118,7 @@ add_shader(fcpw-gpu "mesh.frag")
 add_shader(fcpw-gpu "rt.rchit")
 add_shader(fcpw-gpu "rt.rmiss")
 add_shader(fcpw-gpu "rt.rgen")
+add_shader(fcpw-gpu "cpq.comp")
 
 # define include paths
 

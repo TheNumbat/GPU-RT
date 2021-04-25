@@ -63,5 +63,5 @@ inline std::string last_file(std::string path) {
            std::exit(__LINE__), 0)
 
 #undef assert
-#define assert(expr)                                                                               \
-    (void)((!!(expr)) || (fail_assert(#expr, last_file(__FILE__).c_str(), __LINE__), 0))
+#define assert(...)                                                                               \
+    (void)((!!(__VA_ARGS__)) || (fail_assert(#__VA_ARGS__, last_file(__FILE__).c_str(), __LINE__), 0))

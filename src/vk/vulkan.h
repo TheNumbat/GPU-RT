@@ -70,6 +70,7 @@ struct Buffer {
 
     void copy_to(const Buffer& dst);
     void write(const void* data, size_t size);
+    void read(void* data, size_t size);
     void write_staged(const void* data, size_t dsize);
 
     void to_image(VkCommandBuffer& cmds, const Image& image);
@@ -335,6 +336,9 @@ public:
     void trigger_resize();
 
     VkCommandBuffer begin();
+    VkCommandBuffer begin_one_time();
+    void end_one_time(VkCommandBuffer cmds);
+    
     unsigned int frame() const;
 
     template<typename T> void drop(T&& resource) {
@@ -508,9 +512,6 @@ private:
 
     void init_imgui();
     VkCommandBuffer render_imgui();
-
-    VkCommandBuffer begin_one_time();
-    void end_one_time(VkCommandBuffer cmds);
     void submit_frame(ImageView& img);
 
     VkExtent2D choose_surface_extent();

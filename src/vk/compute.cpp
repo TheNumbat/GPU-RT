@@ -1,5 +1,6 @@
 
 #include "compute.h"
+#include <scene/bvh.h>
 
 namespace VK {
 
@@ -31,7 +32,7 @@ void CPQPipe::create_pipe() {
 
     VkPushConstantRange pushes = {};
     pushes.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-    pushes.size = sizeof(unsigned int);
+    pushes.size = 2 * sizeof(unsigned int);
     pushes.offset = 0;
 
     VkPipelineLayoutCreateInfo layout_info = {};
@@ -71,46 +72,49 @@ VkWriteDescriptorSet CPQPipe::write_buf(const Buffer& buf, int bind) {
     return w;
 }
 
-std::vector<Vec4> CPQPipe::run(const Mesh& mesh, const std::vector<Vec4>& queries) {
+std::vector<Vec4> CPQPipe::run(const BVH& bvh, const std::vector<Vec4>& queries) {
 
-    const auto& verts = mesh.verts();
-    const auto& inds = mesh.inds();
+    const auto& bvh_nodes = bvh.get_nodes();
+    const auto& bvh_tris = bvh.get_triangles();
 
-    std::vector<Vec4> vertices;
-    std::vector<unsigned int> indexes;
-    for(Mesh::Vertex v : verts) vertices.push_back(Vec4(v.pos, 0.0f));
-    for(int i = 0; i < inds.size(); i += 3) {
-        indexes.push_back(inds[i]);
-        indexes.push_back(inds[i+1]);
-        indexes.push_back(inds[i+2]);
-        indexes.push_back(0);
+    std::vector<GPU_Tri> triangles;
+    std::vector<GPU_Node> nodes;
+    triangles.reserve(bvh_tris.size());
+    nodes.reserve(bvh_nodes.size());
+
+    for(const auto& n : bvh_nodes) {
+        nodes.push_back({Vec4{n.bbox.min, 0.0f}, Vec4{n.bbox.max, 0.0f}, n.is_leaf() ? n.start : 0, n.is_leaf() ? n.size : 0, n.hit, n.miss});
+    }
+    for(const auto& t : bvh_tris) {
+        triangles.push_back({Vec4{t.v0, 0.0f}, Vec4{t.v1, 0.0f}, Vec4{t.v2, 0.0f}});
     }
 
     size_t q_size = queries.size() * sizeof(Vec4);
-    size_t v_size = vertices.size() * sizeof(Vec4);
-    size_t i_size = indexes.size() * sizeof(unsigned int);
-    unsigned int n_tris = indexes.size() / 3;
+    size_t t_size = triangles.size() * sizeof(GPU_Tri);
+    size_t n_size = nodes.size() * sizeof(GPU_Node);
 
     Buffer g_queries(q_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
     g_queries.write_staged(queries.data(), q_size);
 
-    Buffer g_verts(v_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
-    g_verts.write_staged(vertices.data(), v_size);
+    Buffer g_tris(t_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+    g_tris.write_staged(triangles.data(), t_size);
 
-    Buffer g_inds(i_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
-    g_inds.write_staged(indexes.data(), i_size);
+    Buffer g_nodes(n_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+    g_nodes.write_staged(nodes.data(), n_size);
 
     Buffer g_output(q_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
   
     {
-        VkWriteDescriptorSet writes[] = {write_buf(g_queries, 0), write_buf(g_output, 1), write_buf(g_verts, 2), write_buf(g_inds, 3)};
+        VkWriteDescriptorSet writes[] = {write_buf(g_queries, 0), write_buf(g_output, 1), write_buf(g_tris, 2), write_buf(g_nodes, 3)};
         vkUpdateDescriptorSets(vk().device(), 4, writes, 0, nullptr);
 
         VkCommandBuffer cmds = vk().begin_one_time();
+        
+        unsigned int consts[] = {(unsigned int)nodes.size(), (unsigned int)triangles.size()};
 
         vkCmdBindDescriptorSets(cmds, VK_PIPELINE_BIND_POINT_COMPUTE, pipe->p_layout, 0, 1, &pipe->descriptor_sets[vk().frame()], 0, nullptr);
         vkCmdBindPipeline(cmds, VK_PIPELINE_BIND_POINT_COMPUTE, pipe->pipe);
-        vkCmdPushConstants(cmds, pipe->p_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(n_tris), &n_tris);
+        vkCmdPushConstants(cmds, pipe->p_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(consts), consts);
         vkCmdDispatch(cmds, queries.size(), 1, 1);
 
         vk().end_one_time(cmds);

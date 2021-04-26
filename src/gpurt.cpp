@@ -6,6 +6,51 @@
 #include <nfd/nfd.h>
 #include <util/image.h>
 
+void split_box(BBox boundingBox, std::vector<BBox>& boxes, int depth) {
+	if (depth == 0) {
+		boxes.emplace_back(boundingBox);
+	} else {
+        Vec3 e = boundingBox.max - boundingBox.min;
+		int splitDim = 0;
+        if(e.z > e.y && e.z > e.x) splitDim = 2;
+        if(e.y > e.z && e.y > e.x) splitDim = 1;
+        if(e.x > e.y && e.x > e.z) splitDim = 0;
+
+		float splitCoord = (boundingBox.min[splitDim] + boundingBox.max[splitDim])*0.5f;
+		BBox boxLeft = boundingBox;
+		boxLeft.max[splitDim] = splitCoord;
+		split_box(boxLeft, boxes, depth - 1);
+		BBox boxRight = boundingBox;
+		boxRight.min[splitDim] = splitCoord;
+		split_box(boxRight, boxes, depth - 1);
+	}
+}
+
+float randf() {
+    return (float)rand() / RAND_MAX;
+}
+
+std::vector<Vec4> gen_points(int N, const BBox& boundingBox) {
+    
+    std::vector<Vec4> points;
+    std::vector<BBox> boxes;
+	split_box(boundingBox, boxes, 6);
+
+	int nBoxes = (int)boxes.size();
+	int nQueriesPerBox = (int)std::ceil((float)N/nBoxes);
+
+	for (int i = 0; i < nBoxes; i++) {
+		Vec3 e = boxes[i].max - boxes[i].min;
+
+		for (int j = 0; j < nQueriesPerBox; j++) {
+			Vec3 o = boxes[i].min + e * Vec3{randf(), randf(), randf()};
+			points.emplace_back(Vec4(o, 0.0f));
+		}
+	}
+	points.resize(N);
+    return points;
+}
+
 GPURT::GPURT(Window& window, std::string scene_file) : window(window), cam(window.drawable()) {
 
     scene.load(Scene::Load_Opts(), scene_file, cam);
@@ -22,13 +67,17 @@ GPURT::GPURT(Window& window, std::string scene_file) : window(window), cam(windo
         build_pipe();
     });
 
-    test_cpq(true);
+    // test_cpq(true);
+    run_cpq(1000000);
 }
 
 GPURT::~GPURT() {
 }
 
 void GPURT::test_cpq(bool print) {
+
+    const VK::Mesh& obj = scene.get(1).mesh();
+    cpq_bvh.build(obj, 8);
 
     std::vector<Vec4> queries;
     std::vector<Vec4> reference;
@@ -50,19 +99,35 @@ void GPURT::test_cpq(bool print) {
     assert(queries.size() == reference.size());
 
     auto t1 = std::chrono::high_resolution_clock::now();
-    auto output = cpq_pipe.run(scene.get(1).mesh(), queries);
+    auto output = cpq_pipe.run(cpq_bvh, queries);
     auto t2 = std::chrono::high_resolution_clock::now();
     auto ms_int = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
-    std::cout << queries.size() << " CPQs done in " << ms_int << std::endl;
 
-    if(print)
-    for(int i = 0; i < queries.size(); i++) {
-        float d_ref = (reference[i].xyz() - queries[i].xyz()).norm();
-        float d_comp = (output[i].xyz() - queries[i].xyz()).norm();
-        if(std::abs(d_ref - d_comp) > EPS_F) {
-            std::cout << "CPQ FAILED: " << reference[i].xyz() << " vs " << output[i].xyz() << std::endl;
+    if(print) {
+        std::cout << queries.size() << " CPQs done in " << ms_int << std::endl;
+        for(int i = 0; i < queries.size(); i++) {
+            float d_ref = (reference[i].xyz() - queries[i].xyz()).norm();
+            float d_comp = (output[i].xyz() - queries[i].xyz()).norm();
+            if(std::abs(d_ref - d_comp) > EPS_F) {
+                std::cout << "CPQ FAILED: " << reference[i].xyz() << " vs " << output[i].xyz() << std::endl;
+            }
         }
     }
+}
+
+void GPURT::run_cpq(int N) {
+
+    const VK::Mesh& obj = scene.get(1).mesh();
+    cpq_bvh.build(obj, 8);
+
+    std::vector<Vec4> queries = gen_points(N, cpq_bvh.box());
+
+    auto t1 = std::chrono::high_resolution_clock::now();
+    auto output = cpq_pipe.run(cpq_bvh, queries);
+    auto t2 = std::chrono::high_resolution_clock::now();
+    auto ms_int = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
+
+    std::cout << queries.size() << " CPQs done in " << ms_int << std::endl;
 }
 
 void GPURT::render() {

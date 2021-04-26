@@ -7,6 +7,7 @@
 
 #include "platform/window.h"
 #include "vk/compute.h"
+#include "scene/bvh.h"
 
 class GPURT {
 public:
@@ -19,6 +20,7 @@ private:
     void event(SDL_Event e);
     void render();
     void test_cpq(bool print);
+    void run_cpq(int N);
     void apply_window_dim(Vec2 new_dim);
 
     void UIsidebar();
@@ -63,5 +65,7 @@ private:
     
     VK::MeshPipe mesh_pipe;
     VK::RTPipe rt_pipe;
+
     VK::CPQPipe cpq_pipe;
+    BVH cpq_bvh;
 };

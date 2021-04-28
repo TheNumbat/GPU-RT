@@ -6,8 +6,8 @@
 #include <scene/scene.h>
 
 #include "platform/window.h"
-#include "vk/compute.h"
 #include "scene/bvh.h"
+#include "vk/compute.h"
 
 class GPURT {
 public:
@@ -19,8 +19,13 @@ public:
 private:
     void event(SDL_Event e);
     void render();
-    void test_cpq(bool print);
-    void run_cpq(int N);
+
+    void test_cpq(bool print, VK::BVH_Type type);
+    void test_ray(bool print, VK::BVH_Type type);
+
+    void time_cpqs(int N, VK::BVH_Type type);
+    void time_rays(int N, VK::BVH_Type type);
+
     void apply_window_dim(Vec2 new_dim);
 
     void UIsidebar();
@@ -62,10 +67,10 @@ private:
 
     std::array<Frame, VK::Manager::MAX_IN_FLIGHT> frames;
     VK::Drop<VK::Pass> mesh_pass;
-    
+
     VK::MeshPipe mesh_pipe;
     VK::RTPipe rt_pipe;
 
-    VK::CPQPipe cpq_pipe;
+    VK::BVHPipe bvh_pipe;
     BVH cpq_bvh;
 };

@@ -7,7 +7,7 @@
 class BVH {
 public:
     struct Node {
-        BBox bbox; 
+        BBox bbox;
         int start, size;
         int l, r;
         int hit, miss;
@@ -29,12 +29,17 @@ public:
     BVH(const BVH& src) = delete;
     BVH& operator=(const BVH& src) = delete;
 
-    const std::vector<Node>& get_nodes() const { return nodes; };
-    const std::vector<Triangle>& get_triangles() const { return triangles; };
-    BBox box() const { return nodes[0].bbox; }
+    const std::vector<Node>& get_nodes() const {
+        return nodes;
+    };
+    const std::vector<Triangle>& get_triangles() const {
+        return triangles;
+    };
+    BBox box() const {
+        return nodes[0].bbox;
+    }
 
 private:
-    
     size_t new_node(BBox box = {}, size_t start = 0, size_t size = 0, size_t l = 0, size_t r = 0);
     void build_links(Node& node, int next_right);
     void build_rec(size_t n, size_t max_leaf_size);

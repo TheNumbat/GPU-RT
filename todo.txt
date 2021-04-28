@@ -8,10 +8,8 @@ SETUP
     render textured objects
 
 FCPW 
-    build my own BVH over the objects
-    send it to the GPU 
-    query it on the GPU with compute shaders
-    optimize that BVH 
+    add ray queries 
+    add stackful / stackless bvh 
 
 Rendering 
     set up RTX BVH and render them with ray tracing lel 

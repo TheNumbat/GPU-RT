@@ -4,32 +4,37 @@
 #include <vector>
 
 #include <lib/mathlib.h>
-#include <util/camera.h>
 #include <scene/scene.h>
+#include <util/camera.h>
 
-#include "vulkan.h"
 #include "render.h"
+#include "vulkan.h"
 
 class BVH;
 
 namespace VK {
 
-struct CPQPipe {
+enum class BVH_Type { none, threaded, stack, stackless };
 
-    CPQPipe() = default;
-    ~CPQPipe();
+struct BVHPipe {
 
-    CPQPipe(const CPQPipe&) = delete;
-    CPQPipe(CPQPipe&& src) = default;
-    CPQPipe& operator=(const CPQPipe&) = delete;
-    CPQPipe& operator=(CPQPipe&& src) = default;
+    BVHPipe() = default;
+    ~BVHPipe();
+
+    BVHPipe(const BVHPipe&) = delete;
+    BVHPipe(BVHPipe&& src) = default;
+    BVHPipe& operator=(const BVHPipe&) = delete;
+    BVHPipe& operator=(BVHPipe&& src) = default;
 
     void recreate();
     void destroy();
 
-    std::vector<Vec4> run(const BVH& mesh, const std::vector<Vec4>& queries);
+    std::vector<Vec4> cpqs(BVH_Type type, const BVH& bvh, const std::vector<Vec4>& queries);
+    std::vector<Vec4> rays(BVH_Type type, const BVH& bvh,
+                           const std::vector<std::pair<Vec4, Vec4>>& queries);
 
-    Drop<PipeData> pipe;
+    Drop<PipeData> threaded_pipe;
+    Drop<PipeData> brute_pipe;
 
 private:
     struct GPU_Tri {
@@ -40,11 +45,18 @@ private:
         Vec4 bmax;
         int start, size, hit, miss;
     };
+    struct Constants {
+        int n_nodes, n_tris, trace_rays;
+    };
 
-    VkWriteDescriptorSet write_buf(const Buffer& buf, int bind);
-    std::array<VkDescriptorBufferInfo,4> buf_infos;
+    std::vector<Vec4> run_threaded(const BVH& bvh, const std::vector<Vec4>& queries, bool rays);
+    std::vector<Vec4> run_brute(const BVH& bvh, const std::vector<Vec4>& queries, bool rays);
+
+    VkWriteDescriptorSet write_buf(const Buffer& buf, const PipeData& pipe, int bind);
+    std::array<VkDescriptorBufferInfo, 16> buf_infos;
+
     void create_pipe();
     void create_desc();
 };
 
-}
+} // namespace VK

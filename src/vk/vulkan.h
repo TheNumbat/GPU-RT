@@ -338,7 +338,7 @@ public:
     VkCommandBuffer begin();
     VkCommandBuffer begin_one_time();
     void end_one_time(VkCommandBuffer cmds);
-    
+
     unsigned int frame() const;
 
     template<typename T> void drop(T&& resource) {

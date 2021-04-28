@@ -34,7 +34,7 @@ void BVH::build(const VK::Mesh& mesh, size_t max_leaf_size) {
     const auto& inds = mesh.inds();
 
     for(size_t i = 0; i < inds.size(); i += 3) {
-        triangles.push_back({verts[inds[i]].pos, verts[inds[i+1]].pos, verts[inds[i+2]].pos});
+        triangles.push_back({verts[inds[i]].pos, verts[inds[i + 1]].pos, verts[inds[i + 2]].pos});
     }
 
     std::stack<BVHBuildData> bstack;
@@ -136,7 +136,7 @@ void BVH::build_rec(size_t n, size_t max_leaf_size) {
         size_t rangel = node.size / 2;
         size_t startr = startl + rangel;
         size_t ranger = node.size - rangel;
-        
+
         size_t l = new_node(nodes[n].bbox, startl, rangel);
         build_rec(l, max_leaf_size);
 
@@ -148,11 +148,11 @@ void BVH::build_rec(size_t n, size_t max_leaf_size) {
         return;
     }
 
-    auto it = std::partition(triangles.begin() + node.start,
-                                triangles.begin() + node.start + node.size,
-                                [split_dim, split_val](const Triangle& p) {
-                                    return p.bbox().center()[split_dim] < split_val;
-                                });
+    auto it =
+        std::partition(triangles.begin() + node.start, triangles.begin() + node.start + node.size,
+                       [split_dim, split_val](const Triangle& p) {
+                           return p.bbox().center()[split_dim] < split_val;
+                       });
 
     size_t startl = node.start;
     size_t rangel = std::distance(triangles.begin(), it) - node.start;

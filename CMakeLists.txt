@@ -120,7 +120,9 @@ add_shader(fcpw-gpu "mesh.frag")
 add_shader(fcpw-gpu "rt.rchit")
 add_shader(fcpw-gpu "rt.rmiss")
 add_shader(fcpw-gpu "rt.rgen")
-add_shader(fcpw-gpu "cpq.comp")
+
+add_shader(fcpw-gpu "bvh_threaded.comp")
+add_shader(fcpw-gpu "bvh_brute.comp")
 
 # define include paths
 

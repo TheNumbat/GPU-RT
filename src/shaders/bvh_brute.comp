@@ -6,30 +6,6 @@
 
 #include "bvhcommon.glsl"
 
-layout (local_size_x = 32) in;
-
-layout (binding = 0, std140) readonly buffer Queries
-{
-	vec4 queries[];
-};
-
-layout (binding = 1, std140) writeonly buffer Output
-{
-	vec4 results[];
-};
-
-layout (binding = 2, std140) readonly buffer Primitives
-{
-	Triangle triangles[];
-};
-
-layout (push_constant) uniform Constants
-{
-	int n_nodes;
-	int n_tris;
-    int trace_rays;
-};
-
 void traverse_cpq(vec3 q, inout vec3 closest, inout float best_dist) {
     for (int t = 0; t < n_tris; t++) {
         vec3 p = cp_triangle(q, triangles[t]);
@@ -43,39 +19,12 @@ void traverse_cpq(vec3 q, inout vec3 closest, inout float best_dist) {
 
 void traverse_ray(vec3 o, vec3 d, inout vec3 hit, inout float best_dist) {
     for (int t = 0; t < n_tris; t++) {
-        
         vec3 hitp;
         float hitd;
         bool h = hit_triangle(o, d, hitp, hitd, triangles[t]);
-
         if(h && hitd < best_dist) {
             best_dist = hitd;
             hit = hitp;
         }
-    }
-}
-
-void main()
-{
-    if(trace_rays == 1) {
-        
-        uint q_idx = 2 * gl_GlobalInvocationID.x;
-        vec3 o = queries[q_idx].xyz;
-        vec3 d = queries[q_idx+1].xyz;
-
-        float hit_dist = LARGE_DIST;
-        vec3 hit_point = vec3(INF);
-        traverse_ray(o, d, hit_point, hit_dist);
-        results[q_idx / 2] = vec4(hit_point, 0.0f);
-
-    } else {
-
-        uint q_idx = gl_GlobalInvocationID.x;
-        vec3 query = queries[q_idx].xyz;
-
-        float best_dist = LARGE_DIST;
-        vec3 best_point = vec3(INF);
-        traverse_cpq(query, best_point, best_dist);
-        results[q_idx] = vec4(best_point, 0.0f);
     }
 }

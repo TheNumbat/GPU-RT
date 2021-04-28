@@ -51,6 +51,7 @@ void BVH::build(const VK::Mesh& mesh, size_t max_leaf_size) {
     new_node(bb, 0, triangles.size(), 0, 0);
     build_rec(0, max_leaf_size);
     build_links(nodes[0], -1);
+    build_parents(0);
 }
 
 void BVH::build_rec(size_t n, size_t max_leaf_size) {
@@ -173,6 +174,16 @@ void BVH::build_rec(size_t n, size_t max_leaf_size) {
 
     nodes[n].l = l;
     nodes[n].r = r;
+}
+
+void BVH::build_parents(int idx) {
+    Node& node = nodes[idx];
+    if(!node.is_leaf()) {
+        nodes[node.l].parent = idx;
+        nodes[node.r].parent = idx;
+        build_parents(node.l);
+        build_parents(node.r);
+    }
 }
 
 void BVH::build_links(Node& node, int next_right) {

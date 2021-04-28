@@ -123,6 +123,7 @@ add_shader(fcpw-gpu "rt.rgen")
 
 add_shader(fcpw-gpu "bvh_threaded.comp")
 add_shader(fcpw-gpu "bvh_brute.comp")
+add_shader(fcpw-gpu "bvh_stack.comp")
 
 # define include paths
 

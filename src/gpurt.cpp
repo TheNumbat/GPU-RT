@@ -7,6 +7,7 @@
 #include <util/image.h>
 
 constexpr int BRUTE_MAX = 10000;
+constexpr int QUERY_MAX = 100000;
 
 static std::string bvh_name(VK::BVH_Type type) {
     switch(type) {
@@ -105,6 +106,10 @@ GPURT::GPURT(Window& window, std::string scene_file) : window(window), cam(windo
     test_ray(true, VK::BVH_Type::none);
     test_cpq(true, VK::BVH_Type::threaded);
     test_ray(true, VK::BVH_Type::threaded);
+    test_cpq(true, VK::BVH_Type::stack);
+    test_ray(true, VK::BVH_Type::stack);
+    test_cpq(true, VK::BVH_Type::stackless);
+    test_ray(true, VK::BVH_Type::stackless);
 }
 
 GPURT::~GPURT() {
@@ -123,6 +128,8 @@ void GPURT::test_cpq(bool print, VK::BVH_Type type) {
         Vec4 q;
         f_queries >> q.x >> q.y >> q.z;
         if(f_queries.good()) queries.push_back(q);
+
+        if(queries.size() >= QUERY_MAX) break;
         if(type == VK::BVH_Type::none && queries.size() >= BRUTE_MAX) break;
     }
 
@@ -131,6 +138,8 @@ void GPURT::test_cpq(bool print, VK::BVH_Type type) {
         Vec4 q;
         f_cps >> q.x >> q.y >> q.z;
         if(f_cps.good()) reference.push_back(q);
+
+        if(reference.size() >= QUERY_MAX) break;
         if(type == VK::BVH_Type::none && reference.size() >= BRUTE_MAX) break;
     }
 
@@ -148,7 +157,7 @@ void GPURT::test_cpq(bool print, VK::BVH_Type type) {
         for(int i = 0; i < queries.size(); i++) {
             float d_ref = (reference[i].xyz() - queries[i].xyz()).norm();
             float d_comp = (output[i].xyz() - queries[i].xyz()).norm();
-            if(std::abs(d_ref - d_comp) > EPS_F) {
+            if(std::abs(d_ref - d_comp) > 0.001f) {
                 std::cout << "CPQ FAILED: " << reference[i].xyz() << " vs " << output[i].xyz()
                           << std::endl;
             }
@@ -170,6 +179,8 @@ void GPURT::test_ray(bool print, VK::BVH_Type type) {
         f_queries >> o.x >> o.y >> o.z;
         f_queries >> d.x >> d.y >> d.z;
         if(f_queries.good()) queries.push_back({o, d});
+
+        if(queries.size() >= QUERY_MAX) break;
         if(type == VK::BVH_Type::none && queries.size() >= BRUTE_MAX) break;
     }
 
@@ -180,6 +191,8 @@ void GPURT::test_ray(bool print, VK::BVH_Type type) {
         f_cps >> ok >> q.x >> q.y >> q.z;
         if(!ok) q.x = q.y = q.z = INFINITY;
         if(f_cps.good()) reference.push_back(q);
+
+        if(reference.size() >= QUERY_MAX) break;
         if(type == VK::BVH_Type::none && reference.size() >= BRUTE_MAX) break;
     }
 
@@ -197,9 +210,8 @@ void GPURT::test_ray(bool print, VK::BVH_Type type) {
         for(int i = 0; i < queries.size(); i++) {
             Vec3 i_ref = reference[i].xyz();
             Vec3 i_comp = output[i].xyz();
-            if(!i_ref.valid() && !i_comp.valid()) return;
-            if(std::abs(i_ref.x - i_comp.x) > EPS_F || std::abs(i_ref.y - i_comp.y) > EPS_F ||
-               std::abs(i_ref.z - i_comp.z) > EPS_F) {
+            if(std::abs(i_ref.x - i_comp.x) > 0.001f || std::abs(i_ref.y - i_comp.y) > 0.001f ||
+               std::abs(i_ref.z - i_comp.z) > 0.001f || i_ref.valid() != i_comp.valid()) {
                 std::cout << "RAY FAILED: " << reference[i].xyz() << " vs " << output[i].xyz()
                           << std::endl;
             }

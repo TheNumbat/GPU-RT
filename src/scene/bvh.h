@@ -11,6 +11,7 @@ public:
         int start, size;
         int l, r;
         int hit, miss;
+        int parent;
         bool is_leaf() const;
     };
 
@@ -42,6 +43,7 @@ public:
 private:
     size_t new_node(BBox box = {}, size_t start = 0, size_t size = 0, size_t l = 0, size_t r = 0);
     void build_links(Node& node, int next_right);
+    void build_parents(int idx);
     void build_rec(size_t n, size_t max_leaf_size);
 
     std::vector<Node> nodes;

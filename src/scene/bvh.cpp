@@ -17,7 +17,7 @@ struct SAHBucketData {
     size_t num_prims;
 };
 
-BBox BVH::Triangle::bbox() const {
+BBox Triangle::bbox() const {
     BBox bb;
     bb.enclose(v0);
     bb.enclose(v1);

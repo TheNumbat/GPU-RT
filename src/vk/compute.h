@@ -16,7 +16,6 @@ class BVH;
 namespace VK {
 
 constexpr size_t BRUTE_MAX = 10000;
-constexpr size_t MAX_BATCH = 1000000;
 
 enum class BVH_Type { none, threaded, stack, stackless, wide, RTX, count };
 
@@ -33,7 +32,7 @@ struct BVHPipe {
     void recreate();
     void destroy();
 
-    void build(const Mesh& mesh);
+    void build(const Mesh& mesh, int leaf_size);
     BBox box();
 
     std::vector<Vec4> cpqs(BVH_Type type, const std::vector<Vec4>& queries, std::chrono::milliseconds& time);

@@ -256,8 +256,8 @@ VkWriteDescriptorSet BVHPipe::write_buf(const Buffer& buf, const PipeData& pipe,
     return w;
 }
 
-void BVHPipe::build(const Mesh& mesh) {
-    bvh.build(mesh, 16);
+void BVHPipe::build(const Mesh& mesh, int leaf_size) {
+    bvh.build(mesh, leaf_size);
     BLAS.clear();
     BLAS.push_back(Accel(mesh));
     TLAS->recreate(BLAS, {Mat4::I});
@@ -390,13 +390,11 @@ std::vector<Vec4> BVHPipe::run_threaded(const std::vector<Vec4>& queries,
     Buffer g_output(o_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                     VMA_MEMORY_USAGE_GPU_ONLY);
 
-    VkWriteDescriptorSet writes[] = {
-        write_buf(g_queries, threaded_pipe, 0), write_buf(g_output, threaded_pipe, 1),
-        write_buf(g_tris, threaded_pipe, 2), write_buf(g_nodes, threaded_pipe, 3)};
-    vkUpdateDescriptorSets(vk().device(), 4, writes, 0, nullptr);
-
-    auto t1 = std::chrono::high_resolution_clock::now();
-    for(size_t i = 0; i < queries.size(); i += MAX_BATCH) {
+    {
+        VkWriteDescriptorSet writes[] = {
+            write_buf(g_queries, threaded_pipe, 0), write_buf(g_output, threaded_pipe, 1),
+            write_buf(g_tris, threaded_pipe, 2), write_buf(g_nodes, threaded_pipe, 3)};
+        vkUpdateDescriptorSets(vk().device(), 4, writes, 0, nullptr);
 
         VkCommandBuffer cmds = vk().begin_one_time();
         vkCmdBindDescriptorSets(cmds, VK_PIPELINE_BIND_POINT_COMPUTE, threaded_pipe->p_layout, 0, 1,
@@ -407,17 +405,17 @@ std::vector<Vec4> BVHPipe::run_threaded(const std::vector<Vec4>& queries,
         consts.n_nodes = nodes.size();
         consts.n_tris = triangles.size();
         consts.trace_rays = rays;
-        consts.start = i;
+        consts.start = 0;
 
-        size_t batch = std::min(MAX_BATCH, queries.size() - i);
         vkCmdPushConstants(cmds, threaded_pipe->p_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
                             sizeof(consts), &consts);
-        vkCmdDispatch(cmds, batch, 1, 1);
+        vkCmdDispatch(cmds, rays ? queries.size() / 2 : queries.size(), 1, 1);
         
+        auto t1 = std::chrono::high_resolution_clock::now();
         vk().end_one_time(cmds);
+        auto t2 = std::chrono::high_resolution_clock::now();
+        time = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
     }
-    auto t2 = std::chrono::high_resolution_clock::now();
-    time = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
 
     std::vector<Vec4> output(rays ? queries.size() / 2 : queries.size());
 
@@ -476,13 +474,12 @@ std::vector<Vec4> BVHPipe::run_stack(const std::vector<Vec4>& queries, bool rays
     Buffer g_output(o_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                     VMA_MEMORY_USAGE_GPU_ONLY);
 
-    VkWriteDescriptorSet writes[] = {
-        write_buf(g_queries, stack_pipe, 0), write_buf(g_output, stack_pipe, 1),
-        write_buf(g_tris, stack_pipe, 2), write_buf(g_nodes, stack_pipe, 3)};
-    vkUpdateDescriptorSets(vk().device(), 4, writes, 0, nullptr);
+    {
+        VkWriteDescriptorSet writes[] = {
+            write_buf(g_queries, stack_pipe, 0), write_buf(g_output, stack_pipe, 1),
+            write_buf(g_tris, stack_pipe, 2), write_buf(g_nodes, stack_pipe, 3)};
+        vkUpdateDescriptorSets(vk().device(), 4, writes, 0, nullptr);
 
-    auto t1 = std::chrono::high_resolution_clock::now();
-    for(size_t i = 0; i < queries.size(); i += MAX_BATCH) {
         VkCommandBuffer cmds = vk().begin_one_time();
 
         vkCmdBindDescriptorSets(cmds, VK_PIPELINE_BIND_POINT_COMPUTE, stack_pipe->p_layout, 0, 1,
@@ -493,18 +490,17 @@ std::vector<Vec4> BVHPipe::run_stack(const std::vector<Vec4>& queries, bool rays
         consts.n_nodes = nodes.size();
         consts.n_tris = triangles.size();
         consts.trace_rays = rays;
-        consts.start = i;
-
-        size_t batch = std::min(MAX_BATCH, queries.size() - i);
+        consts.start = 0;
 
         vkCmdPushConstants(cmds, stack_pipe->p_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
                             sizeof(consts), &consts);
-        vkCmdDispatch(cmds, batch, 1, 1);
-        
+        vkCmdDispatch(cmds, rays ? queries.size() / 2 : queries.size(), 1, 1);
+            
+        auto t1 = std::chrono::high_resolution_clock::now();
         vk().end_one_time(cmds);
+        auto t2 = std::chrono::high_resolution_clock::now();
+        time = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
     }
-    auto t2 = std::chrono::high_resolution_clock::now();
-    time = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
 
     std::vector<Vec4> output(rays ? queries.size() / 2 : queries.size());
 
@@ -529,26 +525,24 @@ std::vector<Vec4> BVHPipe::run_rtx(const std::vector<Vec4>& queries, std::chrono
     Buffer g_output(o_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                     VMA_MEMORY_USAGE_GPU_ONLY);
 
-    VkWriteDescriptorSetAccelerationStructureKHR acc_info = {};
-    acc_info.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
-    acc_info.accelerationStructureCount = 1;
-    acc_info.pAccelerationStructures = &TLAS->accel;
+    {
+        VkWriteDescriptorSetAccelerationStructureKHR acc_info = {};
+        acc_info.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+        acc_info.accelerationStructureCount = 1;
+        acc_info.pAccelerationStructures = &TLAS->accel;
 
-    VkWriteDescriptorSet a_write = {};
-    a_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    a_write.dstSet = rt_pipe->descriptor_sets[vk().frame()];
-    a_write.dstBinding = 2;
-    a_write.dstArrayElement = 0;
-    a_write.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
-    a_write.descriptorCount = 1;
-    a_write.pNext = &acc_info;
+        VkWriteDescriptorSet a_write = {};
+        a_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        a_write.dstSet = rt_pipe->descriptor_sets[vk().frame()];
+        a_write.dstBinding = 2;
+        a_write.dstArrayElement = 0;
+        a_write.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+        a_write.descriptorCount = 1;
+        a_write.pNext = &acc_info;
 
-    VkWriteDescriptorSet writes[] = {
-        write_buf(g_queries, rt_pipe, 0), write_buf(g_output, rt_pipe, 1), a_write};
-    vkUpdateDescriptorSets(vk().device(), 3, writes, 0, nullptr);
-
-    auto t1 = std::chrono::high_resolution_clock::now();
-    for(size_t i = 0; i < queries.size(); i += MAX_BATCH) {
+        VkWriteDescriptorSet writes[] = {
+            write_buf(g_queries, rt_pipe, 0), write_buf(g_output, rt_pipe, 1), a_write};
+        vkUpdateDescriptorSets(vk().device(), 3, writes, 0, nullptr);
 
         VkCommandBuffer cmds = vk().begin_one_time();
 
@@ -556,10 +550,7 @@ std::vector<Vec4> BVHPipe::run_rtx(const std::vector<Vec4>& queries, std::chrono
                                 &rt_pipe->descriptor_sets[vk().frame()], 0, nullptr);
         vkCmdBindPipeline(cmds, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, rt_pipe->pipe);
 
-        size_t batch = std::min(MAX_BATCH, queries.size() - i);
-
         Constants consts;
-        consts.start = i;
         vkCmdPushConstants(cmds, rt_pipe->p_layout, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 0,
                            sizeof(consts), &consts);
 
@@ -574,12 +565,13 @@ std::vector<Vec4> BVHPipe::run_rtx(const std::vector<Vec4>& queries, std::chrono
                                     Stride{sbt_addr + 2u * groupSize, groupStride, groupSize}, // hit
                                     Stride{0u, 0u, 0u}};
 
-        vk().rtx.vkCmdTraceRaysKHR(cmds, &addrs[0], &addrs[1], &addrs[2], &addrs[3], batch, 1, 1);
+        vk().rtx.vkCmdTraceRaysKHR(cmds, &addrs[0], &addrs[1], &addrs[2], &addrs[3], queries.size() / 2, 1, 1);
         
+        auto t1 = std::chrono::high_resolution_clock::now();
         vk().end_one_time(cmds);
+        auto t2 = std::chrono::high_resolution_clock::now();
+        time = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
     }
-    auto t2 = std::chrono::high_resolution_clock::now();
-    time = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
 
     std::vector<Vec4> output(queries.size() / 2);
 

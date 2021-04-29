@@ -7,7 +7,7 @@
 #include <nfd/nfd.h>
 #include <util/image.h>
 
-constexpr int QUERY_MAX = 10000000;
+constexpr int QUERY_MAX = 1000000;
 
 static std::string bvh_name(VK::BVH_Type type) {
     switch(type) {
@@ -103,8 +103,15 @@ GPURT::GPURT(Window& window, std::string scene_file) : window(window), cam(windo
         build_pipe();
     });
 
-    std::cout << "Testing file: " << scene_file << std::endl;
-    run_tests();
+    // test_wbvh();
+
+    const VK::Mesh& obj = scene.get(1).mesh();
+    bvh_pipe.build(obj, 16);
+
+    if(scene_file == "bunny.obj") {
+        std::cout << "Testing file: " << scene_file << std::endl;
+        run_tests();
+    }
     std::cout << "Benchmarking random coherent: " << std::endl;
     benchmark_rng();
     std::cout << "Benchmarking primary rays: " << std::endl;
@@ -117,15 +124,15 @@ GPURT::~GPURT() {
 void GPURT::benchmark_primary() {
 
     const VK::Mesh& obj = scene.get(1).mesh();
-    bvh_pipe.build(obj);
+    bvh_pipe.build(obj, 1);
 
     Mat4 iV = cam.get_view().inverse();
     Mat4 iP = cam.get_proj().inverse();
     Vec4 o = Vec4(cam.pos(), 0.0f);
 
     std::vector<std::pair<Vec4,Vec4>> queries;
-    for(int y = 0; y < 1080; y++) {
-        for(int x = 0; x < 1920; x++) {
+    for(int y = 0; y < 720; y++) {
+        for(int x = 0; x < 1280; x++) {
 
             Vec2 pixelCenter = Vec2(x,y) + Vec2(0.5f);
             Vec2 inUV = pixelCenter / Vec2(x,y);
@@ -142,10 +149,13 @@ void GPURT::benchmark_primary() {
     time_rays(queries, VK::BVH_Type::RTX);
 }
 
-void GPURT::benchmark_rng() {
+void GPURT::test_wbvh() {
 
-    const VK::Mesh& obj = scene.get(1).mesh();
-    bvh_pipe.build(obj);
+    BVH bvh(scene.get(1).mesh());
+
+}
+
+void GPURT::benchmark_rng() {
 
     std::vector<Vec4> queries = gen_points(QUERY_MAX, bvh_pipe.box());
     std::vector<std::pair<Vec4,Vec4>> rqueries = gen_rays(QUERY_MAX, bvh_pipe.box());
@@ -161,9 +171,6 @@ void GPURT::benchmark_rng() {
 }
 
 void GPURT::run_tests() {
-
-    const VK::Mesh& obj = scene.get(1).mesh();
-    bvh_pipe.build(obj);
 
     std::vector<Vec4> queries;
     std::vector<Vec4> reference;

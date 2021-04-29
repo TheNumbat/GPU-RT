@@ -23,6 +23,7 @@ private:
     void run_tests();
     void benchmark_rng();
     void benchmark_primary();
+    void test_wbvh();
     
     void test_cpq(const std::vector<Vec4>& queries, const std::vector<Vec4>& reference, bool print,
                   VK::BVH_Type type);

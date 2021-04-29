@@ -4,6 +4,25 @@
 #include <lib/mathlib.h>
 #include <vk/render.h>
 
+struct Triangle {
+    Vec3 v0, v1, v2;
+    BBox bbox() const;
+};
+
+template<int W>
+class WBVH {
+public:
+    static constexpr int N = 1 << W;
+    alignas(16) struct Node {
+        BBox lb[N];
+        BBox rb[N];
+        int l[N];
+        int r[N];
+    };
+    std::vector<Node> nodes;
+    std::vector<Triangle> triangles;
+};
+
 class BVH {
 public:
     struct Node {
@@ -13,11 +32,6 @@ public:
         int hit, miss;
         int parent;
         bool is_leaf() const;
-    };
-
-    struct Triangle {
-        Vec3 v0, v1, v2;
-        BBox bbox() const;
     };
 
     BVH() = default;
@@ -38,6 +52,57 @@ public:
     };
     BBox box() const {
         return nodes[0].bbox;
+    }
+
+    template<int W> 
+    WBVH<W> make_wide() {
+
+        WBVH<W> wbvh;
+        wbvh.triangles = triangles;
+
+        wbvh.nodes.push_back({});
+        build_wide(wbvh, 0, 0);
+    }
+
+    template<int W>
+    void build_wide(WBVH<W>& wbvh, int wn, int n) {
+
+        WBVH<W>::template Node& wnode = wbvh.nodes[wn];
+        gather(wnode, nodes[n], 0, 0);
+
+        for(int i = 0; i < WBVH<W>::N; i++) {
+            if(wnode.r[i] >= 0) {
+                
+                size_t wl_c = wbvh.nodes.size();
+                wbvh.nodes.push_back({});
+                build_wide(wbvh, wl_c, wnode.l[i]);
+                wnode.l[i] = wl_c;
+
+                size_t wr_c = wbvh.nodes.size();
+                wbvh.nodes.push_back({});
+                build_wide(wbvh, wl_c, wnode.r[i]);
+                wnode.r[i] = wr_c;
+            }
+        }
+    }
+
+    template<int W>
+    int gather(WBVH<W>::Node& wn, Node& n, int s, int d) {
+        if(d == W || n.l == n.r) {
+            wn.lb = nodes[n.l].bbox;
+            wn.rb = nodes[n.r].bbox;
+            wn.l[s] = n.l;
+            wn.r[s] = n.r;
+            if(wn.l[s] == wn.r[s]) {
+                wn.l[s] = -n.start;
+                wn.r[s] = -n.size;
+            }
+            s++;
+        } else {
+            s = gather(n, nodes[n.l], s, d + 1);
+            s = gather(n, nodes[n.r], s, d + 1);
+        }
+        return s;
     }
 
 private:

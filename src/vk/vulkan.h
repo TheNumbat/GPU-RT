@@ -34,6 +34,10 @@
 
 namespace VK {
 
+inline unsigned int align_up(unsigned int v, unsigned int a) {
+    return (v + a - 1) & ~(a - 1);
+}
+
 class Manager;
 
 struct Buffer;
@@ -258,6 +262,7 @@ struct Accel {
 
     void recreate(const Mesh& mesh);
     void recreate(const std::vector<Drop<Accel>>& blas, const std::vector<Mat4>& inst);
+    void recreate(const Drop<Accel>& blas, Mat4 inst);
     void destroy();
 
     VkAccelerationStructureKHR accel = {};

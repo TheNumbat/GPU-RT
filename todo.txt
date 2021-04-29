@@ -8,8 +8,9 @@ SETUP
     render textured objects
 
 FCPW 
-    add ray queries 
-    add stackful / stackless bvh 
+    wide bvh 
+    OBB / RSS bvh
+    RTX queries for CPQs???
 
 Rendering 
     set up RTX BVH and render them with ray tracing lel 

@@ -143,7 +143,8 @@ void Buffer::recreate(VkDeviceSize sz, VkBufferUsageFlags busage, VmaMemoryUsage
     VmaAllocationCreateInfo alloc_info = {};
     alloc_info.usage = mem_usage;
 
-    if(sz) VK_CHECK(vmaCreateBuffer(vk().gpu_alloc, &buf_info, &alloc_info, &buf, &mem, nullptr));
+    if(sz)
+        VK_CHECK(vmaCreateBuffer(vk().gpu_alloc, &buf_info, &alloc_info, &buf, &mem, nullptr));
 }
 
 void* Buffer::map() const {
@@ -194,7 +195,7 @@ void Buffer::to_image(VkCommandBuffer& cmds, const Image& image) {
 }
 
 void Buffer::write(const void* data, size_t dsize) {
-
+    
     if(!dsize) return;
     assert(dsize <= size);
 
@@ -205,7 +206,7 @@ void Buffer::write(const void* data, size_t dsize) {
 }
 
 void Buffer::read(void* data, size_t dsize) {
-
+    
     if(!dsize) return;
     assert(dsize <= size);
 

@@ -8,5 +8,5 @@ hitAttributeEXT vec3 attribs;
 void main()
 {
   const vec3 barycentricCoords = vec3(1.0f - attribs.x - attribs.y, attribs.x, attribs.y);
-  payload = barycentricCoords;
+  payload = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 }

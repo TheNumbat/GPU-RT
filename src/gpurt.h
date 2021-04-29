@@ -21,7 +21,8 @@ private:
     void render();
 
     void run_tests();
-    void benchmark();
+    void benchmark_rng();
+    void benchmark_primary();
     
     void test_cpq(const std::vector<Vec4>& queries, const std::vector<Vec4>& reference, bool print,
                   VK::BVH_Type type);
@@ -77,5 +78,4 @@ private:
     VK::RTPipe rt_pipe;
 
     VK::BVHPipe bvh_pipe;
-    BVH cpq_bvh;
 };

@@ -5,6 +5,7 @@
 
 #include <lib/mathlib.h>
 #include <scene/scene.h>
+#include <scene/bvh.h>
 #include <util/camera.h>
 
 #include "render.h"
@@ -15,9 +16,9 @@ class BVH;
 namespace VK {
 
 constexpr size_t BRUTE_MAX = 10000;
-constexpr size_t MAX_BATCH = 100000;
+constexpr size_t MAX_BATCH = 1000000;
 
-enum class BVH_Type { none, threaded, stack, stackless };
+enum class BVH_Type { none, threaded, stack, stackless, wide, RTX, count };
 
 struct BVHPipe {
 
@@ -32,15 +33,23 @@ struct BVHPipe {
     void recreate();
     void destroy();
 
-    std::vector<Vec4> cpqs(BVH_Type type, const BVH& bvh, const std::vector<Vec4>& queries);
-    std::vector<Vec4> rays(BVH_Type type, const BVH& bvh,
-                           const std::vector<std::pair<Vec4, Vec4>>& queries);
+    void build(const Mesh& mesh);
+    BBox box();
+
+    std::vector<Vec4> cpqs(BVH_Type type, const std::vector<Vec4>& queries, std::chrono::milliseconds& time);
+    std::vector<Vec4> rays(BVH_Type type, const std::vector<std::pair<Vec4, Vec4>>& queries, std::chrono::milliseconds& time);
 
     Drop<PipeData> threaded_pipe;
     Drop<PipeData> brute_pipe;
     Drop<PipeData> stack_pipe;
+    Drop<PipeData> rt_pipe;
 
 private:
+    Drop<Buffer> sbt;
+    BVH bvh;
+    std::vector<Drop<Accel>> BLAS;
+    Drop<Accel> TLAS;
+
     struct GPU_Tri {
         Vec4 v0, v1, v2;
     };
@@ -63,10 +72,10 @@ private:
         int sort_children = 0;
     };
 
-    std::vector<Vec4> run_threaded(const BVH& bvh, const std::vector<Vec4>& queries, bool rays);
-    std::vector<Vec4> run_brute(const BVH& bvh, const std::vector<Vec4>& queries, bool rays);
-    std::vector<Vec4> run_stack(const BVH& bvh, const std::vector<Vec4>& queries, bool rays,
-                                bool stackless);
+    std::vector<Vec4> run_threaded(const std::vector<Vec4>& queries, bool rays, std::chrono::milliseconds& time);
+    std::vector<Vec4> run_brute(const std::vector<Vec4>& queries, bool rays, std::chrono::milliseconds& time);
+    std::vector<Vec4> run_stack(const std::vector<Vec4>& queries, bool rays, bool stackless, std::chrono::milliseconds& time);
+    std::vector<Vec4> run_rtx(const std::vector<Vec4>& queries, std::chrono::milliseconds& time);
 
     VkWriteDescriptorSet write_buf(const Buffer& buf, const PipeData& pipe, int bind);
     std::array<VkDescriptorBufferInfo, 16> buf_infos;

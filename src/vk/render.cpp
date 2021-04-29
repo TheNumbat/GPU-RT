@@ -405,10 +405,6 @@ void RTPipe::use_accel(const Accel& tlas) {
     vkUpdateDescriptorSets(vk().device(), 1, &acw, 0, nullptr);
 }
 
-static unsigned int align_up(unsigned int v, unsigned int a) {
-    return (v + a - 1) & ~(a - 1);
-}
-
 void RTPipe::trace(VkCommandBuffer& cmds, VkExtent2D ext) {
 
     vkCmdBindPipeline(cmds, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipe->pipe);

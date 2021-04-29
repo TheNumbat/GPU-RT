@@ -32,6 +32,7 @@ layout (push_constant) uniform Constants
 {
 	int n_nodes;
 	int n_tris;
+	int start;
 	int trace_rays;
 	int stackless;
 	int sort_children;
@@ -43,24 +44,24 @@ void traverse_ray(vec3 o, vec3 d, inout vec3 hit, inout float best_dist);
 void main() {
     if(trace_rays == 1) {
         
-        uint q_idx = 2 * gl_GlobalInvocationID.x;
-        vec3 o = queries[q_idx].xyz;
-        vec3 d = queries[q_idx+1].xyz;
+        uint q_idx = gl_GlobalInvocationID.x;
+        vec3 o = queries[2 * (start + q_idx)].xyz;
+        vec3 d = queries[2 * (start + q_idx) + 1].xyz;
 
         float hit_dist = LARGE_DIST;
         vec3 hit_point = vec3(INF);
         traverse_ray(o, d, hit_point, hit_dist);
-        results[q_idx / 2] = vec4(hit_point, 0.0f);
+        results[start + q_idx] = vec4(hit_point, 0.0f);
 
     } else {
 
         uint q_idx = gl_GlobalInvocationID.x;
-        vec3 query = queries[q_idx].xyz;
+        vec3 query = queries[start + q_idx].xyz;
 
         float best_dist = LARGE_DIST;
         vec3 best_point = vec3(INF);
         traverse_cpq(query, best_point, best_dist);
-        results[q_idx] = vec4(best_point, 0.0f);
+        results[start + q_idx] = vec4(best_point, 0.0f);
     }
 }
 

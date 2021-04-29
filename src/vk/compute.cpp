@@ -1,5 +1,6 @@
 
 #include "compute.h"
+#include <algorithm>
 #include <scene/bvh.h>
 
 namespace VK {
@@ -88,8 +89,8 @@ void BVHPipe::create_pipe() {
         info.stage = stage_info;
         info.layout = stack_pipe->p_layout;
 
-        VK_CHECK(vkCreateComputePipelines(vk().device(), nullptr, 1, &info, nullptr,
-                                          &stack_pipe->pipe));
+        VK_CHECK(
+            vkCreateComputePipelines(vk().device(), nullptr, 1, &info, nullptr, &stack_pipe->pipe));
     }
 
     {
@@ -182,7 +183,8 @@ std::vector<Vec4> BVHPipe::run_brute(const BVH& bvh, const std::vector<Vec4>& qu
         triangles.push_back({Vec4{t.v0, 0.0f}, Vec4{t.v1, 0.0f}, Vec4{t.v2, 0.0f}});
     }
 
-    size_t q_size = queries.size() * sizeof(Vec4);
+    size_t n_queries = std::min(queries.size(), (rays ? 2 * BRUTE_MAX : BRUTE_MAX));
+    size_t q_size = n_queries * sizeof(Vec4);
     size_t t_size = triangles.size() * sizeof(GPU_Tri);
     size_t o_size = rays ? q_size / 2 : q_size;
 
@@ -215,12 +217,12 @@ std::vector<Vec4> BVHPipe::run_brute(const BVH& bvh, const std::vector<Vec4>& qu
         vkCmdBindPipeline(cmds, VK_PIPELINE_BIND_POINT_COMPUTE, brute_pipe->pipe);
         vkCmdPushConstants(cmds, brute_pipe->p_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
                            sizeof(consts), &consts);
-        vkCmdDispatch(cmds, queries.size(), 1, 1);
+        vkCmdDispatch(cmds, n_queries, 1, 1);
 
         vk().end_one_time(cmds);
     }
 
-    std::vector<Vec4> output(rays ? queries.size() / 2 : queries.size());
+    std::vector<Vec4> output(rays ? n_queries / 2 : n_queries);
 
     Buffer c_output(o_size, VK_IMAGE_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
     g_output.copy_to(c_output);
@@ -268,7 +270,7 @@ std::vector<Vec4> BVHPipe::run_threaded(const BVH& bvh, const std::vector<Vec4>&
     Buffer g_output(o_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                     VMA_MEMORY_USAGE_GPU_ONLY);
 
-    {
+    for(size_t i = 0; i < queries.size(); i += MAX_BATCH) {
         VkWriteDescriptorSet writes[] = {
             write_buf(g_queries, threaded_pipe, 0), write_buf(g_output, threaded_pipe, 1),
             write_buf(g_tris, threaded_pipe, 2), write_buf(g_nodes, threaded_pipe, 3)};
@@ -280,13 +282,16 @@ std::vector<Vec4> BVHPipe::run_threaded(const BVH& bvh, const std::vector<Vec4>&
         consts.n_nodes = nodes.size();
         consts.n_tris = triangles.size();
         consts.trace_rays = rays;
+        consts.start = i;
+
+        size_t batch = std::min(MAX_BATCH, queries.size() - i);
 
         vkCmdBindDescriptorSets(cmds, VK_PIPELINE_BIND_POINT_COMPUTE, threaded_pipe->p_layout, 0, 1,
                                 &threaded_pipe->descriptor_sets[vk().frame()], 0, nullptr);
         vkCmdBindPipeline(cmds, VK_PIPELINE_BIND_POINT_COMPUTE, threaded_pipe->pipe);
         vkCmdPushConstants(cmds, threaded_pipe->p_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
-                           sizeof(consts), &consts);
-        vkCmdDispatch(cmds, queries.size(), 1, 1);
+                            sizeof(consts), &consts);
+        vkCmdDispatch(cmds, batch, 1, 1);
 
         vk().end_one_time(cmds);
     }
@@ -300,8 +305,8 @@ std::vector<Vec4> BVHPipe::run_threaded(const BVH& bvh, const std::vector<Vec4>&
     return output;
 }
 
-std::vector<Vec4> BVHPipe::run_stack(const BVH& bvh, const std::vector<Vec4>& queries,
-                                        bool rays, bool stackless) {
+std::vector<Vec4> BVHPipe::run_stack(const BVH& bvh, const std::vector<Vec4>& queries, bool rays,
+                                     bool stackless) {
 
     const auto& bvh_nodes = bvh.get_nodes();
     const auto& bvh_tris = bvh.get_triangles();
@@ -348,7 +353,7 @@ std::vector<Vec4> BVHPipe::run_stack(const BVH& bvh, const std::vector<Vec4>& qu
     Buffer g_output(o_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                     VMA_MEMORY_USAGE_GPU_ONLY);
 
-    {
+    for(size_t i = 0; i < queries.size(); i += MAX_BATCH) {
         VkWriteDescriptorSet writes[] = {
             write_buf(g_queries, stack_pipe, 0), write_buf(g_output, stack_pipe, 1),
             write_buf(g_tris, stack_pipe, 2), write_buf(g_nodes, stack_pipe, 3)};
@@ -360,14 +365,16 @@ std::vector<Vec4> BVHPipe::run_stack(const BVH& bvh, const std::vector<Vec4>& qu
         consts.n_nodes = nodes.size();
         consts.n_tris = triangles.size();
         consts.trace_rays = rays;
-        consts.stackless = stackless;
+        consts.start = i;
+
+        size_t batch = std::min(MAX_BATCH, queries.size() - i);
 
         vkCmdBindDescriptorSets(cmds, VK_PIPELINE_BIND_POINT_COMPUTE, stack_pipe->p_layout, 0, 1,
                                 &stack_pipe->descriptor_sets[vk().frame()], 0, nullptr);
         vkCmdBindPipeline(cmds, VK_PIPELINE_BIND_POINT_COMPUTE, stack_pipe->pipe);
         vkCmdPushConstants(cmds, stack_pipe->p_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
-                           sizeof(consts), &consts);
-        vkCmdDispatch(cmds, queries.size(), 1, 1);
+                            sizeof(consts), &consts);
+        vkCmdDispatch(cmds, batch, 1, 1);
 
         vk().end_one_time(cmds);
     }

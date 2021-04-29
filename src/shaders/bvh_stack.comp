@@ -15,7 +15,7 @@ layout (binding = 3, std140) readonly buffer Nodes
 	Node nodes[];
 };
 
-#define MAX_DEPTH 32
+#define MAX_DEPTH 64
 #define PARENT 0
 #define SIBLING 1
 #define CHILD 2

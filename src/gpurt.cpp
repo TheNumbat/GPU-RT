@@ -1,13 +1,13 @@
 
 #include "gpurt.h"
 
+#include <algorithm>
 #include <chrono>
 #include <imgui/imgui.h>
 #include <nfd/nfd.h>
 #include <util/image.h>
 
-constexpr int BRUTE_MAX = 10000;
-constexpr int QUERY_MAX = 100000;
+constexpr int QUERY_MAX = 1000000;
 
 static std::string bvh_name(VK::BVH_Type type) {
     switch(type) {
@@ -102,20 +102,31 @@ GPURT::GPURT(Window& window, std::string scene_file) : window(window), cam(windo
         build_pipe();
     });
 
-    test_cpq(true, VK::BVH_Type::none);
-    test_ray(true, VK::BVH_Type::none);
-    test_cpq(true, VK::BVH_Type::threaded);
-    test_ray(true, VK::BVH_Type::threaded);
-    test_cpq(true, VK::BVH_Type::stack);
-    test_ray(true, VK::BVH_Type::stack);
-    test_cpq(true, VK::BVH_Type::stackless);
-    test_ray(true, VK::BVH_Type::stackless);
+    // run_tests();
+    benchmark();
 }
 
 GPURT::~GPURT() {
 }
 
-void GPURT::test_cpq(bool print, VK::BVH_Type type) {
+void GPURT::benchmark() {
+
+    const VK::Mesh& obj = scene.get(1).mesh();
+    cpq_bvh.build(obj, 8);
+
+    std::vector<Vec4> queries = gen_points(QUERY_MAX, cpq_bvh.box());
+    std::vector<std::pair<Vec4,Vec4>> rqueries = gen_rays(QUERY_MAX, cpq_bvh.box());
+
+    time_cpqs(queries, VK::BVH_Type::threaded);
+    time_cpqs(queries, VK::BVH_Type::stack);
+    time_cpqs(queries, VK::BVH_Type::stackless);
+
+    time_rays(rqueries, VK::BVH_Type::threaded);
+    time_rays(rqueries, VK::BVH_Type::stack);
+    time_rays(rqueries, VK::BVH_Type::stackless);
+}
+
+void GPURT::run_tests() {
 
     const VK::Mesh& obj = scene.get(1).mesh();
     cpq_bvh.build(obj, 8);
@@ -128,22 +139,56 @@ void GPURT::test_cpq(bool print, VK::BVH_Type type) {
         Vec4 q;
         f_queries >> q.x >> q.y >> q.z;
         if(f_queries.good()) queries.push_back(q);
-
         if(queries.size() >= QUERY_MAX) break;
-        if(type == VK::BVH_Type::none && queries.size() >= BRUTE_MAX) break;
     }
 
-    std::ifstream f_cps("points.txt");
-    while(f_cps.good()) {
+    std::ifstream f_points("points.txt");
+    while(f_points.good()) {
         Vec4 q;
-        f_cps >> q.x >> q.y >> q.z;
-        if(f_cps.good()) reference.push_back(q);
-
+        f_points >> q.x >> q.y >> q.z;
+        if(f_points.good()) reference.push_back(q);
         if(reference.size() >= QUERY_MAX) break;
-        if(type == VK::BVH_Type::none && reference.size() >= BRUTE_MAX) break;
     }
 
     assert(queries.size() == reference.size());
+
+    std::vector<std::pair<Vec4, Vec4>> rqueries;
+    std::vector<Vec4> rreference;
+
+    std::ifstream f_rqueries("rqueries.txt");
+    while(f_rqueries.good()) {
+        Vec4 o, d;
+        f_rqueries >> o.x >> o.y >> o.z;
+        f_rqueries >> d.x >> d.y >> d.z;
+        if(f_rqueries.good()) rqueries.push_back({o, d});
+        if(rqueries.size() >= QUERY_MAX) break;
+    }
+
+    std::ifstream f_rpoints("rpoints.txt");
+    while(f_rpoints.good()) {
+        int ok;
+        Vec4 q;
+        f_rpoints >> ok >> q.x >> q.y >> q.z;
+        if(!ok) q.x = q.y = q.z = INFINITY;
+        if(f_rpoints.good()) rreference.push_back(q);
+        if(rreference.size() >= QUERY_MAX) break;
+    }
+
+    assert(rqueries.size() == rreference.size());
+
+    test_cpq(queries, reference, true, VK::BVH_Type::none);
+    test_cpq(queries, reference, true, VK::BVH_Type::threaded);
+    test_cpq(queries, reference, true, VK::BVH_Type::stack);
+    test_cpq(queries, reference, true, VK::BVH_Type::stackless);
+
+    test_ray(rqueries, rreference, true, VK::BVH_Type::none);
+    test_ray(rqueries, rreference, true, VK::BVH_Type::threaded);
+    test_ray(rqueries, rreference, true, VK::BVH_Type::stack);
+    test_ray(rqueries, rreference, true, VK::BVH_Type::stackless);
+}
+
+void GPURT::test_cpq(const std::vector<Vec4>& queries, const std::vector<Vec4>& reference,
+                     bool print, VK::BVH_Type type) {
 
     auto t1 = std::chrono::high_resolution_clock::now();
     auto output = bvh_pipe.cpqs(type, cpq_bvh, queries);
@@ -151,10 +196,12 @@ void GPURT::test_cpq(bool print, VK::BVH_Type type) {
     auto ms_int = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
 
     if(print) {
+        size_t n_queries =
+            type == VK::BVH_Type::none ? std::min(VK::BRUTE_MAX, queries.size()) : queries.size();
         std::cout << "Checking " << bvh_name(type);
-        std::cout << queries.size() << " CPQs done in " << ms_int << std::endl;
+        std::cout << n_queries << " CPQs done in " << ms_int << std::endl;
 
-        for(int i = 0; i < queries.size(); i++) {
+        for(int i = 0; i < n_queries; i++) {
             float d_ref = (reference[i].xyz() - queries[i].xyz()).norm();
             float d_comp = (output[i].xyz() - queries[i].xyz()).norm();
             if(std::abs(d_ref - d_comp) > 0.001f) {
@@ -165,38 +212,8 @@ void GPURT::test_cpq(bool print, VK::BVH_Type type) {
     }
 }
 
-void GPURT::test_ray(bool print, VK::BVH_Type type) {
-
-    const VK::Mesh& obj = scene.get(1).mesh();
-    cpq_bvh.build(obj, 8);
-
-    std::vector<std::pair<Vec4, Vec4>> queries;
-    std::vector<Vec4> reference;
-
-    std::ifstream f_queries("rqueries.txt");
-    while(f_queries.good()) {
-        Vec4 o, d;
-        f_queries >> o.x >> o.y >> o.z;
-        f_queries >> d.x >> d.y >> d.z;
-        if(f_queries.good()) queries.push_back({o, d});
-
-        if(queries.size() >= QUERY_MAX) break;
-        if(type == VK::BVH_Type::none && queries.size() >= BRUTE_MAX) break;
-    }
-
-    std::ifstream f_cps("rpoints.txt");
-    while(f_cps.good()) {
-        int ok;
-        Vec4 q;
-        f_cps >> ok >> q.x >> q.y >> q.z;
-        if(!ok) q.x = q.y = q.z = INFINITY;
-        if(f_cps.good()) reference.push_back(q);
-
-        if(reference.size() >= QUERY_MAX) break;
-        if(type == VK::BVH_Type::none && reference.size() >= BRUTE_MAX) break;
-    }
-
-    assert(queries.size() == reference.size());
+void GPURT::test_ray(const std::vector<std::pair<Vec4, Vec4>>& queries,
+                     const std::vector<Vec4>& reference, bool print, VK::BVH_Type type) {
 
     auto t1 = std::chrono::high_resolution_clock::now();
     auto output = bvh_pipe.rays(type, cpq_bvh, queries);
@@ -204,10 +221,12 @@ void GPURT::test_ray(bool print, VK::BVH_Type type) {
     auto ms_int = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
 
     if(print) {
+        size_t n_queries =
+            type == VK::BVH_Type::none ? std::min(VK::BRUTE_MAX, queries.size()) : queries.size();
         std::cout << "Checking " << bvh_name(type);
-        std::cout << queries.size() << " rays done in " << ms_int << std::endl;
+        std::cout << n_queries << " rays done in " << ms_int << std::endl;
 
-        for(int i = 0; i < queries.size(); i++) {
+        for(int i = 0; i < n_queries; i++) {
             Vec3 i_ref = reference[i].xyz();
             Vec3 i_comp = output[i].xyz();
             if(std::abs(i_ref.x - i_comp.x) > 0.001f || std::abs(i_ref.y - i_comp.y) > 0.001f ||
@@ -219,12 +238,7 @@ void GPURT::test_ray(bool print, VK::BVH_Type type) {
     }
 }
 
-void GPURT::time_cpqs(int N, VK::BVH_Type type) {
-
-    const VK::Mesh& obj = scene.get(1).mesh();
-    cpq_bvh.build(obj, 8);
-
-    std::vector<Vec4> queries = gen_points(N, cpq_bvh.box());
+void GPURT::time_cpqs(const std::vector<Vec4>& queries, VK::BVH_Type type) {
 
     auto t1 = std::chrono::high_resolution_clock::now();
     auto output = bvh_pipe.cpqs(type, cpq_bvh, queries);
@@ -234,12 +248,7 @@ void GPURT::time_cpqs(int N, VK::BVH_Type type) {
     std::cout << bvh_name(type) << queries.size() << " CPQs done in " << ms_int << std::endl;
 }
 
-void GPURT::time_rays(int N, VK::BVH_Type type) {
-
-    const VK::Mesh& obj = scene.get(1).mesh();
-    cpq_bvh.build(obj, 8);
-
-    std::vector<std::pair<Vec4, Vec4>> queries = gen_rays(N, cpq_bvh.box());
+void GPURT::time_rays(const std::vector<std::pair<Vec4, Vec4>>& queries, VK::BVH_Type type) {
 
     auto t1 = std::chrono::high_resolution_clock::now();
     auto output = bvh_pipe.rays(type, cpq_bvh, queries);

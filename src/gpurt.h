@@ -20,11 +20,16 @@ private:
     void event(SDL_Event e);
     void render();
 
-    void test_cpq(bool print, VK::BVH_Type type);
-    void test_ray(bool print, VK::BVH_Type type);
+    void run_tests();
+    void benchmark();
+    
+    void test_cpq(const std::vector<Vec4>& queries, const std::vector<Vec4>& reference, bool print,
+                  VK::BVH_Type type);
+    void test_ray(const std::vector<std::pair<Vec4, Vec4>>& queries,
+                  const std::vector<Vec4>& reference, bool print, VK::BVH_Type type);
 
-    void time_cpqs(int N, VK::BVH_Type type);
-    void time_rays(int N, VK::BVH_Type type);
+    void time_cpqs(const std::vector<Vec4>& queries, VK::BVH_Type type);
+    void time_rays(const std::vector<std::pair<Vec4, Vec4>>& queries, VK::BVH_Type type);
 
     void apply_window_dim(Vec2 new_dim);
 

@@ -14,6 +14,7 @@ void BVHPipe::recreate() {
     brute_pipe.drop();
     stack_pipe.drop();
     rt_pipe.drop();
+    obb_pipe.drop();
     for(auto& w : wide_pipe)
         w.drop();
     sbt.drop();
@@ -26,6 +27,7 @@ void BVHPipe::destroy() {
     brute_pipe.drop();
     stack_pipe.drop();
     rt_pipe.drop();
+    obb_pipe.drop();
     for(auto& w : wide_pipe)
         w.drop();
     sbt.drop();
@@ -151,6 +153,40 @@ void BVHPipe::create_pipe() {
 
         VK_CHECK(
             vkCreateComputePipelines(vk().device(), nullptr, 1, &info, nullptr, &stack_pipe->pipe));
+    }
+
+    {
+        obb_pipe->destroy_swap();
+
+        Shader obb(File::read("shaders/bvh_obb.comp.spv").value());
+        VkPipelineShaderStageCreateInfo stage_info = {};
+        stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stage_info.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+        stage_info.module = obb.shader;
+        stage_info.pName = "main";
+
+        VkPushConstantRange pushes = {};
+        pushes.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        pushes.size = sizeof(Constants);
+        pushes.offset = 0;
+
+        VkPipelineLayoutCreateInfo layout_info = {};
+        layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        layout_info.setLayoutCount = 1;
+        layout_info.pSetLayouts = &obb_pipe->d_layout;
+        layout_info.pushConstantRangeCount = 1;
+        layout_info.pPushConstantRanges = &pushes;
+
+        VK_CHECK(
+            vkCreatePipelineLayout(vk().device(), &layout_info, nullptr, &obb_pipe->p_layout));
+
+        VkComputePipelineCreateInfo info = {};
+        info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+        info.stage = stage_info;
+        info.layout = obb_pipe->p_layout;
+
+        VK_CHECK(
+            vkCreateComputePipelines(vk().device(), nullptr, 1, &info, nullptr, &obb_pipe->pipe));
     }
 
     {
@@ -310,6 +346,7 @@ VkWriteDescriptorSet BVHPipe::write_buf(const Buffer& buf, const PipeData& pipe,
 
 void BVHPipe::build(const Mesh& mesh, int leaf_size) {
     bvh.build(mesh, leaf_size);
+    obbbvh.build(mesh, leaf_size);
     wbvh1 = bvh.make_wide<1>();
     wbvh2 = bvh.make_wide<2>();
     wbvh3 = bvh.make_wide<3>();
@@ -325,6 +362,8 @@ std::vector<Vec4> BVHPipe::cpqs(BVH_Type type, const std::vector<Vec4>& queries,
     case BVH_Type::threaded: return run_threaded(queries, false, time);
     case BVH_Type::stack: return run_stack(queries, false, false, time);
     case BVH_Type::stackless: return run_stack(queries, false, true, time);
+    case BVH_Type::obb: return run_obb(queries, false, false, time);
+    case BVH_Type::obb_stackless: return run_obb(queries, false, true, time);
     case BVH_Type::wide: return run_wide(queries, false, 0, time, w);
     case BVH_Type::wide_max: return run_wide(queries, false, 1, time, w);
     case BVH_Type::wide_sort: return run_wide(queries, false, 2, time, w);
@@ -344,6 +383,8 @@ std::vector<Vec4> BVHPipe::rays(BVH_Type type, const std::vector<std::pair<Vec4,
     case BVH_Type::threaded: return run_threaded(q, true, time);
     case BVH_Type::stack: return run_stack(q, true, false, time);
     case BVH_Type::stackless: return run_stack(q, true, true, time);
+    case BVH_Type::obb: return run_obb(q, true, false, time);
+    case BVH_Type::obb_stackless: return run_obb(q, true, true, time);
     case BVH_Type::wide: return run_wide(q, true, 0, time, w);
     case BVH_Type::wide_max: return run_wide(q, true, 1, time, w);
     case BVH_Type::wide_sort: return run_wide(q, true, 2, time, w);
@@ -552,9 +593,95 @@ std::vector<Vec4> BVHPipe::run_stack(const std::vector<Vec4>& queries, bool rays
         consts.n_nodes = nodes.size();
         consts.n_tris = triangles.size();
         consts.trace_rays = rays;
+        consts.stackless = stackless;
         consts.start = 0;
 
         vkCmdPushConstants(cmds, stack_pipe->p_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
+                            sizeof(consts), &consts);
+        vkCmdDispatch(cmds, rays ? queries.size() / 2 : queries.size(), 1, 1);
+            
+        auto t1 = std::chrono::high_resolution_clock::now();
+        vk().end_one_time(cmds);
+        auto t2 = std::chrono::high_resolution_clock::now();
+        time = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
+    }
+
+    std::vector<Vec4> output(rays ? queries.size() / 2 : queries.size());
+
+    Buffer c_output(o_size, VK_IMAGE_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+    g_output.copy_to(c_output);
+    c_output.read(output.data(), o_size);
+
+    return output;
+}
+
+std::vector<Vec4> BVHPipe::run_obb(const std::vector<Vec4>& queries, bool rays,
+                                     bool stackless, std::chrono::milliseconds& time) {
+
+    const auto& bvh_nodes = obbbvh.get_nodes();
+    const auto& bvh_tris = obbbvh.get_triangles();
+
+    std::vector<GPU_Tri> triangles;
+    std::vector<OBB_Node> nodes;
+    triangles.reserve(bvh_tris.size());
+    nodes.reserve(bvh_nodes.size());
+
+    for(const auto& n : bvh_nodes) {
+        Vec4 ext{n.bbox.ext, 0.0f};
+        if(stackless) {
+            if(n.is_leaf()) {
+                nodes.push_back({n.bbox.T, ext, n.parent, n.parent, n.start, n.size});
+            } else {
+                nodes.push_back({n.bbox.T, ext, n.l, n.r, n.parent, 0});
+            }
+        } else {
+            nodes.push_back({n.bbox.T, ext, n.l, n.r, n.start, n.size});
+        }
+    }
+    for(const auto& t : bvh_tris) {
+        triangles.push_back({Vec4{t.v0, 0.0f}, Vec4{t.v1, 0.0f}, Vec4{t.v2, 0.0f}});
+    }
+
+    size_t q_size = queries.size() * sizeof(Vec4);
+    size_t t_size = triangles.size() * sizeof(GPU_Tri);
+    size_t n_size = nodes.size() * sizeof(OBB_Node);
+    size_t o_size = rays ? q_size / 2 : q_size;
+
+    Buffer g_queries(q_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                     VMA_MEMORY_USAGE_GPU_ONLY);
+    g_queries.write_staged(queries.data(), q_size);
+
+    Buffer g_tris(t_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                  VMA_MEMORY_USAGE_GPU_ONLY);
+    g_tris.write_staged(triangles.data(), t_size);
+
+    Buffer g_nodes(n_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                   VMA_MEMORY_USAGE_GPU_ONLY);
+    g_nodes.write_staged(nodes.data(), n_size);
+
+    Buffer g_output(o_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                    VMA_MEMORY_USAGE_GPU_ONLY);
+
+    {
+        VkWriteDescriptorSet writes[] = {
+            write_buf(g_queries, obb_pipe, 0), write_buf(g_output, obb_pipe, 1),
+            write_buf(g_tris, obb_pipe, 2), write_buf(g_nodes, obb_pipe, 3)};
+        vkUpdateDescriptorSets(vk().device(), 4, writes, 0, nullptr);
+
+        VkCommandBuffer cmds = vk().begin_one_time();
+
+        vkCmdBindDescriptorSets(cmds, VK_PIPELINE_BIND_POINT_COMPUTE, obb_pipe->p_layout, 0, 1,
+                                &obb_pipe->descriptor_sets[vk().frame()], 0, nullptr);
+        vkCmdBindPipeline(cmds, VK_PIPELINE_BIND_POINT_COMPUTE, obb_pipe->pipe);
+        
+        Constants consts;
+        consts.n_nodes = nodes.size();
+        consts.n_tris = triangles.size();
+        consts.trace_rays = rays;
+        consts.stackless = stackless;
+        consts.start = 0;
+
+        vkCmdPushConstants(cmds, obb_pipe->p_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
                             sizeof(consts), &consts);
         vkCmdDispatch(cmds, rays ? queries.size() / 2 : queries.size(), 1, 1);
             
@@ -823,6 +950,54 @@ void BVHPipe::create_desc() {
         wide_pipe[w]->descriptor_sets.resize(Manager::MAX_IN_FLIGHT);
         VK_CHECK(vkAllocateDescriptorSets(vk().device(), &alloc_info,
                                           wide_pipe[w]->descriptor_sets.data()));
+    }
+
+    { // OBB
+        VkDescriptorSetLayoutBinding i_bind = {};
+        i_bind.binding = 0;
+        i_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        i_bind.descriptorCount = 1;
+        i_bind.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+        VkDescriptorSetLayoutBinding o_bind = {};
+        o_bind.binding = 1;
+        o_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        o_bind.descriptorCount = 1;
+        o_bind.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+        VkDescriptorSetLayoutBinding v_bind = {};
+        v_bind.binding = 2;
+        v_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        v_bind.descriptorCount = 1;
+        v_bind.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+        VkDescriptorSetLayoutBinding id_bind = {};
+        id_bind.binding = 3;
+        id_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        id_bind.descriptorCount = 1;
+        id_bind.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+        VkDescriptorSetLayoutBinding bindings[] = {i_bind, o_bind, v_bind, id_bind};
+
+        VkDescriptorSetLayoutCreateInfo layout_info = {};
+        layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        layout_info.bindingCount = 4;
+        layout_info.pBindings = bindings;
+
+        VK_CHECK(vkCreateDescriptorSetLayout(vk().device(), &layout_info, nullptr,
+                                             &obb_pipe->d_layout));
+
+        std::vector<VkDescriptorSetLayout> layouts(Manager::MAX_IN_FLIGHT, obb_pipe->d_layout);
+
+        VkDescriptorSetAllocateInfo alloc_info = {};
+        alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        alloc_info.descriptorPool = vk().pool();
+        alloc_info.descriptorSetCount = Manager::MAX_IN_FLIGHT;
+        alloc_info.pSetLayouts = layouts.data();
+
+        obb_pipe->descriptor_sets.resize(Manager::MAX_IN_FLIGHT);
+        VK_CHECK(vkAllocateDescriptorSets(vk().device(), &alloc_info,
+                                          obb_pipe->descriptor_sets.data()));
     }
 
     { // STACK

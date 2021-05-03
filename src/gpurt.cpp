@@ -16,6 +16,8 @@ static std::string bvh_name(VK::BVH_Type type, int w) {
     case VK::BVH_Type::threaded: return "[threaded]: ";
     case VK::BVH_Type::stack: return "[stackful]: ";
     case VK::BVH_Type::stackless: return "[stackless]: ";
+    case VK::BVH_Type::obb: return "[obb stackful]: ";
+    case VK::BVH_Type::obb_stackless: return "[obb stackless]: ";
     case VK::BVH_Type::wide: return "[wide " + std::to_string(1 << w) + "]: ";
     case VK::BVH_Type::wide_max: return "[wide_max " + std::to_string(1 << w) + "]: ";
     case VK::BVH_Type::wide_sort: return "[wide_sort " + std::to_string(1 << w) + "]: ";
@@ -112,7 +114,7 @@ GPURT::GPURT(Window& window, std::string scene_file) : window(window), cam(windo
 
     if(scene_file == "bunny.obj") {
         std::cout << "Testing file: " << scene_file << std::endl;
-        run_tests();
+        // run_tests();
     }
     std::cout << "Benchmarking random coherent: " << std::endl;
     benchmark_rng();
@@ -148,6 +150,8 @@ void GPURT::benchmark_primary() {
     time_rays(queries, VK::BVH_Type::threaded);
     time_rays(queries, VK::BVH_Type::stack);
     time_rays(queries, VK::BVH_Type::stackless);
+    time_rays(queries, VK::BVH_Type::obb);
+    time_rays(queries, VK::BVH_Type::obb_stackless);
     time_rays(queries, VK::BVH_Type::RTX);
     time_rays(queries, VK::BVH_Type::wide, 1);
     time_rays(queries, VK::BVH_Type::wide, 2);
@@ -169,6 +173,8 @@ void GPURT::benchmark_rng() {
     time_cpqs(queries, VK::BVH_Type::threaded);
     time_cpqs(queries, VK::BVH_Type::stack);
     time_cpqs(queries, VK::BVH_Type::stackless);
+    time_cpqs(queries, VK::BVH_Type::obb);
+    time_cpqs(queries, VK::BVH_Type::obb_stackless);
     time_cpqs(queries, VK::BVH_Type::wide, 1);
     time_cpqs(queries, VK::BVH_Type::wide, 2);
     time_cpqs(queries, VK::BVH_Type::wide, 3);
@@ -183,6 +189,8 @@ void GPURT::benchmark_rng() {
     time_rays(rqueries, VK::BVH_Type::threaded);
     time_rays(rqueries, VK::BVH_Type::stack);
     time_rays(rqueries, VK::BVH_Type::stackless);
+    time_rays(rqueries, VK::BVH_Type::obb);
+    time_rays(rqueries, VK::BVH_Type::obb_stackless);
     time_rays(rqueries, VK::BVH_Type::RTX);
     time_rays(rqueries, VK::BVH_Type::wide, 1);
     time_rays(rqueries, VK::BVH_Type::wide, 2);
@@ -257,6 +265,8 @@ void GPURT::run_tests() {
     test_cpq(queries, reference, true, VK::BVH_Type::wide_sort, 2);
     test_cpq(queries, reference, true, VK::BVH_Type::wide_sort, 3);
     test_cpq(queries, reference, true, VK::BVH_Type::wide_sort, 4);
+    test_cpq(queries, reference, true, VK::BVH_Type::obb);
+    test_cpq(queries, reference, true, VK::BVH_Type::obb_stackless);
 
     test_ray(rqueries, rreference, true, VK::BVH_Type::none);
     test_ray(rqueries, rreference, true, VK::BVH_Type::threaded);
@@ -273,6 +283,8 @@ void GPURT::run_tests() {
     test_ray(rqueries, rreference, true, VK::BVH_Type::wide_sort, 2);
     test_ray(rqueries, rreference, true, VK::BVH_Type::wide_sort, 3);
     test_ray(rqueries, rreference, true, VK::BVH_Type::wide_sort, 4);
+    test_ray(rqueries, rreference, true, VK::BVH_Type::obb);
+    test_ray(rqueries, rreference, true, VK::BVH_Type::obb_stackless);
 }
 
 void GPURT::test_cpq(const std::vector<Vec4>& queries, const std::vector<Vec4>& reference,

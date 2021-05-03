@@ -3,6 +3,7 @@
 
 #include <lib/mathlib.h>
 #include <vk/render.h>
+#include <scene/obb.h>
 
 struct Triangle {
     Vec3 v0, v1, v2;
@@ -113,3 +114,43 @@ private:
     std::vector<Node> nodes;
     std::vector<Triangle> triangles;
 };
+
+class OBBBVH {
+public:
+    struct Node {
+        OBB bbox;
+        int start, size;
+        int l, r;
+        int parent;
+        bool is_leaf() const;
+    };
+
+    OBBBVH() = default;
+    OBBBVH(const VK::Mesh& mesh, size_t max_leaf_size = 1);
+    void build(const VK::Mesh& mesh, size_t max_leaf_size = 1);
+
+    OBBBVH(OBBBVH&& src) = default;
+    OBBBVH& operator=(OBBBVH&& src) = default;
+
+    OBBBVH(const OBBBVH& src) = delete;
+    OBBBVH& operator=(const OBBBVH& src) = delete;
+
+    const std::vector<Node>& get_nodes() const {
+        return nodes;
+    };
+    const std::vector<Triangle>& get_triangles() const {
+        return triangles;
+    };
+    BBox box() const {
+        return nodes[0].bbox.box();
+    }
+
+private:
+    size_t new_node(OBB box = {}, size_t start = 0, size_t size = 0, size_t l = 0, size_t r = 0);
+    void build_parents(int idx);
+    void build_rec(size_t n, size_t max_leaf_size);
+
+    std::vector<Node> nodes;
+    std::vector<Triangle> triangles;
+};
+

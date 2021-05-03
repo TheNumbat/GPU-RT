@@ -87,6 +87,12 @@ bool hit_bbox(vec3 o, vec3 d, vec3 pMin, vec3 pMax, float maxd, out float mind) 
 	return tNearMax <= tFarMin;
 }
 
+bool hit_obb(vec3 o, vec3 d, mat4 T, vec3 ext, float maxd, out float mind) {
+	vec3 oT = (T * vec4(o, 1)).xyz;
+	vec3 dT = (T * vec4(d, 0)).xyz;
+	return hit_bbox(oT, dT, -ext, ext, maxd, mind);
+}
+
 void box_dist(vec3 q, vec3 bmin, vec3 bmax, out float close, out float far) {
 	vec3 u = bmin - q;
 	vec3 v = q - bmax;
@@ -94,6 +100,11 @@ void box_dist(vec3 q, vec3 bmin, vec3 bmax, out float close, out float far) {
 	vec3 fr = min(u,v);
 	close = length(cl);
 	far = length(fr);
+}
+
+void obb_dist(vec3 q, mat4 T, vec3 ext, out float close, out float far) {
+	vec3 qT = (T * vec4(q, 1)).xyz;
+	box_dist(qT, -ext, ext, close, far);
 }
 
 bool hit_triangle(vec3 o, vec3 d, out vec3 hitp, out float hitd, Triangle tri) {

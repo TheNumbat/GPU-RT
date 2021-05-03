@@ -27,6 +27,8 @@ set(SOURCES_CLIENT "src/main.cpp"
                    "src/scene/pose.cpp"
                    "src/scene/bvh.h"
                    "src/scene/bvh.cpp"
+                   "src/scene/obb.h"
+                   "src/scene/obb.cpp"
                    "src/scene/material.h"
                    "src/scene/material.cpp"
                    "src/platform/imgui_impl_sdl.h"
@@ -129,6 +131,7 @@ add_shader(fcpw-gpu "rquery.rgen")
 add_shader(fcpw-gpu "bvh_threaded.comp")
 add_shader(fcpw-gpu "bvh_brute.comp")
 add_shader(fcpw-gpu "bvh_stack.comp")
+add_shader(fcpw-gpu "bvh_obb.comp")
 
 add_shader(fcpw-gpu "bvh_wide1.comp")
 add_shader(fcpw-gpu "bvh_wide2.comp")

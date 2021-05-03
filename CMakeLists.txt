@@ -103,7 +103,7 @@ find_program(GLSLC glslc)
 
     add_custom_command(
            OUTPUT ${current-output-path}
-           COMMAND ${GLSLC} -o ${current-output-path} ${current-shader-path} --target-env=vulkan1.2
+           COMMAND ${GLSLC} -o ${current-output-path} ${current-shader-path} -O --target-env=vulkan1.2
            DEPENDS ${current-shader-path}
            IMPLICIT_DEPENDS CXX ${current-shader-path}
            VERBATIM)
@@ -129,6 +129,11 @@ add_shader(fcpw-gpu "rquery.rgen")
 add_shader(fcpw-gpu "bvh_threaded.comp")
 add_shader(fcpw-gpu "bvh_brute.comp")
 add_shader(fcpw-gpu "bvh_stack.comp")
+
+add_shader(fcpw-gpu "bvh_wide1.comp")
+add_shader(fcpw-gpu "bvh_wide2.comp")
+add_shader(fcpw-gpu "bvh_wide3.comp")
+add_shader(fcpw-gpu "bvh_wide4.comp")
 
 # define include paths
 

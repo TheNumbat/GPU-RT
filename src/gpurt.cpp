@@ -8,13 +8,17 @@
 #include <util/image.h>
 
 constexpr int QUERY_MAX = 1000000;
+// constexpr int QUERY_MAX = 100;
 
-static std::string bvh_name(VK::BVH_Type type) {
+static std::string bvh_name(VK::BVH_Type type, int w) {
     switch(type) {
     case VK::BVH_Type::none: return "[brute force]: ";
     case VK::BVH_Type::threaded: return "[threaded]: ";
     case VK::BVH_Type::stack: return "[stackful]: ";
     case VK::BVH_Type::stackless: return "[stackless]: ";
+    case VK::BVH_Type::wide: return "[wide " + std::to_string(1 << w) + "]: ";
+    case VK::BVH_Type::wide_max: return "[wide_max " + std::to_string(1 << w) + "]: ";
+    case VK::BVH_Type::wide_sort: return "[wide_sort " + std::to_string(1 << w) + "]: ";
     case VK::BVH_Type::RTX: return "[RTX]: ";
     }
     return "[unknown]: ";
@@ -103,8 +107,6 @@ GPURT::GPURT(Window& window, std::string scene_file) : window(window), cam(windo
         build_pipe();
     });
 
-    // test_wbvh();
-
     const VK::Mesh& obj = scene.get(1).mesh();
     bvh_pipe.build(obj, 16);
 
@@ -147,27 +149,51 @@ void GPURT::benchmark_primary() {
     time_rays(queries, VK::BVH_Type::stack);
     time_rays(queries, VK::BVH_Type::stackless);
     time_rays(queries, VK::BVH_Type::RTX);
-}
-
-void GPURT::test_wbvh() {
-
-    BVH bvh(scene.get(1).mesh());
-
+    time_rays(queries, VK::BVH_Type::wide, 1);
+    time_rays(queries, VK::BVH_Type::wide, 2);
+    time_rays(queries, VK::BVH_Type::wide, 3);
+    time_rays(queries, VK::BVH_Type::wide, 4);
+    time_rays(queries, VK::BVH_Type::wide_max, 2);
+    time_rays(queries, VK::BVH_Type::wide_max, 3);
+    time_rays(queries, VK::BVH_Type::wide_max, 4);
+    time_rays(queries, VK::BVH_Type::wide_sort, 2);
+    time_rays(queries, VK::BVH_Type::wide_sort, 3);
+    time_rays(queries, VK::BVH_Type::wide_sort, 4);
 }
 
 void GPURT::benchmark_rng() {
 
     std::vector<Vec4> queries = gen_points(QUERY_MAX, bvh_pipe.box());
-    std::vector<std::pair<Vec4,Vec4>> rqueries = gen_rays(QUERY_MAX, bvh_pipe.box());
+    std::vector<std::pair<Vec4,Vec4>> rqueries = gen_rays(10 * QUERY_MAX, bvh_pipe.box());
 
     time_cpqs(queries, VK::BVH_Type::threaded);
     time_cpqs(queries, VK::BVH_Type::stack);
     time_cpqs(queries, VK::BVH_Type::stackless);
+    time_cpqs(queries, VK::BVH_Type::wide, 1);
+    time_cpqs(queries, VK::BVH_Type::wide, 2);
+    time_cpqs(queries, VK::BVH_Type::wide, 3);
+    time_cpqs(queries, VK::BVH_Type::wide, 4);
+    time_cpqs(queries, VK::BVH_Type::wide_max, 2);
+    time_cpqs(queries, VK::BVH_Type::wide_max, 3);
+    time_cpqs(queries, VK::BVH_Type::wide_max, 4);
+    time_cpqs(queries, VK::BVH_Type::wide_sort, 2);
+    time_cpqs(queries, VK::BVH_Type::wide_sort, 3);
+    time_cpqs(queries, VK::BVH_Type::wide_sort, 4);
 
     time_rays(rqueries, VK::BVH_Type::threaded);
     time_rays(rqueries, VK::BVH_Type::stack);
     time_rays(rqueries, VK::BVH_Type::stackless);
     time_rays(rqueries, VK::BVH_Type::RTX);
+    time_rays(rqueries, VK::BVH_Type::wide, 1);
+    time_rays(rqueries, VK::BVH_Type::wide, 2);
+    time_rays(rqueries, VK::BVH_Type::wide, 3);
+    time_rays(rqueries, VK::BVH_Type::wide, 4);
+    time_rays(rqueries, VK::BVH_Type::wide_max, 2);
+    time_rays(rqueries, VK::BVH_Type::wide_max, 3);
+    time_rays(rqueries, VK::BVH_Type::wide_max, 4);
+    time_rays(rqueries, VK::BVH_Type::wide_sort, 2);
+    time_rays(rqueries, VK::BVH_Type::wide_sort, 3);
+    time_rays(rqueries, VK::BVH_Type::wide_sort, 4);
 }
 
 void GPURT::run_tests() {
@@ -221,24 +247,44 @@ void GPURT::run_tests() {
     test_cpq(queries, reference, true, VK::BVH_Type::threaded);
     test_cpq(queries, reference, true, VK::BVH_Type::stack);
     test_cpq(queries, reference, true, VK::BVH_Type::stackless);
+    test_cpq(queries, reference, true, VK::BVH_Type::wide, 1);
+    test_cpq(queries, reference, true, VK::BVH_Type::wide, 2);
+    test_cpq(queries, reference, true, VK::BVH_Type::wide, 3);
+    test_cpq(queries, reference, true, VK::BVH_Type::wide, 4);
+    test_cpq(queries, reference, true, VK::BVH_Type::wide_max, 2);
+    test_cpq(queries, reference, true, VK::BVH_Type::wide_max, 3);
+    test_cpq(queries, reference, true, VK::BVH_Type::wide_max, 4);
+    test_cpq(queries, reference, true, VK::BVH_Type::wide_sort, 2);
+    test_cpq(queries, reference, true, VK::BVH_Type::wide_sort, 3);
+    test_cpq(queries, reference, true, VK::BVH_Type::wide_sort, 4);
 
     test_ray(rqueries, rreference, true, VK::BVH_Type::none);
     test_ray(rqueries, rreference, true, VK::BVH_Type::threaded);
     test_ray(rqueries, rreference, true, VK::BVH_Type::stack);
     test_ray(rqueries, rreference, true, VK::BVH_Type::stackless);
     test_ray(rqueries, rreference, true, VK::BVH_Type::RTX);
+    test_ray(rqueries, rreference, true, VK::BVH_Type::wide, 1);
+    test_ray(rqueries, rreference, true, VK::BVH_Type::wide, 2);
+    test_ray(rqueries, rreference, true, VK::BVH_Type::wide, 3);
+    test_ray(rqueries, rreference, true, VK::BVH_Type::wide, 4);
+    test_ray(rqueries, rreference, true, VK::BVH_Type::wide_max, 2);
+    test_ray(rqueries, rreference, true, VK::BVH_Type::wide_max, 3);
+    test_ray(rqueries, rreference, true, VK::BVH_Type::wide_max, 4);
+    test_ray(rqueries, rreference, true, VK::BVH_Type::wide_sort, 2);
+    test_ray(rqueries, rreference, true, VK::BVH_Type::wide_sort, 3);
+    test_ray(rqueries, rreference, true, VK::BVH_Type::wide_sort, 4);
 }
 
 void GPURT::test_cpq(const std::vector<Vec4>& queries, const std::vector<Vec4>& reference,
-                     bool print, VK::BVH_Type type) {
+                     bool print, VK::BVH_Type type, int w) {
 
     std::chrono::milliseconds ms_int;
-    auto output = bvh_pipe.cpqs(type, queries, ms_int);
+    auto output = bvh_pipe.cpqs(type, queries, ms_int, w);
 
     if(print) {
         size_t n_queries =
             type == VK::BVH_Type::none ? std::min(VK::BRUTE_MAX, queries.size()) : queries.size();
-        std::cout << "Checking " << bvh_name(type);
+        std::cout << "Checking " << bvh_name(type, w);
         std::cout << n_queries << " CPQs done in " << ms_int << std::endl;
 
         for(int i = 0; i < n_queries; i++) {
@@ -253,15 +299,15 @@ void GPURT::test_cpq(const std::vector<Vec4>& queries, const std::vector<Vec4>& 
 }
 
 void GPURT::test_ray(const std::vector<std::pair<Vec4, Vec4>>& queries,
-                     const std::vector<Vec4>& reference, bool print, VK::BVH_Type type) {
+                     const std::vector<Vec4>& reference, bool print, VK::BVH_Type type, int w) {
 
     std::chrono::milliseconds ms_int;
-    auto output = bvh_pipe.rays(type, queries, ms_int);
+    auto output = bvh_pipe.rays(type, queries, ms_int, w);
 
     if(print) {
         size_t n_queries =
             type == VK::BVH_Type::none ? std::min(VK::BRUTE_MAX, queries.size()) : queries.size();
-        std::cout << "Checking " << bvh_name(type);
+        std::cout << "Checking " << bvh_name(type, w);
         std::cout << n_queries << " rays done in " << ms_int << std::endl;
 
         for(int i = 0; i < n_queries; i++) {
@@ -276,18 +322,18 @@ void GPURT::test_ray(const std::vector<std::pair<Vec4, Vec4>>& queries,
     }
 }
 
-void GPURT::time_cpqs(const std::vector<Vec4>& queries, VK::BVH_Type type) {
+void GPURT::time_cpqs(const std::vector<Vec4>& queries, VK::BVH_Type type, int w) {
 
     std::chrono::milliseconds ms_int;
-    auto output = bvh_pipe.cpqs(type, queries, ms_int);
-    std::cout << bvh_name(type) << queries.size() << " CPQs done in " << ms_int << std::endl;
+    auto output = bvh_pipe.cpqs(type, queries, ms_int, w);
+    std::cout << bvh_name(type, w) << queries.size() << " CPQs done in " << ms_int << std::endl;
 }
 
-void GPURT::time_rays(const std::vector<std::pair<Vec4, Vec4>>& queries, VK::BVH_Type type) {
+void GPURT::time_rays(const std::vector<std::pair<Vec4, Vec4>>& queries, VK::BVH_Type type, int w) {
 
     std::chrono::milliseconds ms_int;
-    auto output = bvh_pipe.rays(type, queries, ms_int);
-    std::cout << bvh_name(type) << queries.size() << " rays done in " << ms_int << std::endl;
+    auto output = bvh_pipe.rays(type, queries, ms_int, w);
+    std::cout << bvh_name(type, w) << queries.size() << " rays done in " << ms_int << std::endl;
 }
 
 void GPURT::render() {
@@ -299,6 +345,7 @@ void GPURT::render() {
 
     if(use_rt) {
 
+        // run_tests();
         build_accel();
 
         rt_pipe.use_image(f.rt_target_view);

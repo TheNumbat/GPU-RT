@@ -12,15 +12,20 @@ struct Triangle {
 template<int W>
 class WBVH {
 public:
+    static_assert(W >= 1);
     static constexpr int N = 1 << W;
-    alignas(16) struct Node {
-        BBox lb[N];
-        BBox rb[N];
-        int l[N];
-        int r[N];
+    struct alignas(16) Node {
+        Vec4 bmin[N];
+        Vec4 bmax[N];
+        int next[N];
+        int leaf[N];
+        Node() {
+            for(int i = 0; i < N; i++) {
+                next[i] = leaf[i] = -1;
+            }
+        }
     };
     std::vector<Node> nodes;
-    std::vector<Triangle> triangles;
 };
 
 class BVH {
@@ -56,53 +61,47 @@ public:
 
     template<int W> 
     WBVH<W> make_wide() {
-
         WBVH<W> wbvh;
-        wbvh.triangles = triangles;
-
         wbvh.nodes.push_back({});
         build_wide(wbvh, 0, 0);
+        return wbvh;
+    }
+
+    template<int W>
+    int gather(WBVH<W>::Node& wn, int n, int s, int d) {
+        Node& node = nodes[n];
+        if(d == W || node.l == node.r) {
+            wn.bmin[s] = Vec4(node.bbox.min, 0.0f);
+            wn.bmax[s] = Vec4(node.bbox.max, 0.0f);
+            wn.next[s] = n;
+            wn.leaf[s] = 0;
+            if(node.l == node.r) {
+                wn.bmin[s] = Vec4(BBox().min, 0.0f);
+                wn.bmax[s] = Vec4(BBox().max, 0.0f);
+                wn.next[s] = -node.size;
+                wn.leaf[s] = node.start;
+            }
+            s++;
+        } else {
+            s = gather<W>(wn, node.l, s, d + 1);
+            s = gather<W>(wn, node.r, s, d + 1);
+        }
+        return s;
     }
 
     template<int W>
     void build_wide(WBVH<W>& wbvh, int wn, int n) {
 
-        WBVH<W>::template Node& wnode = wbvh.nodes[wn];
-        gather(wnode, nodes[n], 0, 0);
+        gather<W>(wbvh.nodes[wn], n, 0, 0);
 
         for(int i = 0; i < WBVH<W>::N; i++) {
-            if(wnode.r[i] >= 0) {
-                
-                size_t wl_c = wbvh.nodes.size();
-                wbvh.nodes.push_back({});
-                build_wide(wbvh, wl_c, wnode.l[i]);
-                wnode.l[i] = wl_c;
-
-                size_t wr_c = wbvh.nodes.size();
-                wbvh.nodes.push_back({});
-                build_wide(wbvh, wl_c, wnode.r[i]);
-                wnode.r[i] = wr_c;
-            }
+            if(wbvh.nodes[wn].leaf[i] < 0) break;
+            if(wbvh.nodes[wn].next[i] < 0) continue;
+            size_t child = wbvh.nodes.size();
+            wbvh.nodes.push_back({});
+            build_wide(wbvh, child, wbvh.nodes[wn].next[i]);
+            wbvh.nodes[wn].next[i] = child;
         }
-    }
-
-    template<int W>
-    int gather(WBVH<W>::Node& wn, Node& n, int s, int d) {
-        if(d == W || n.l == n.r) {
-            wn.lb = nodes[n.l].bbox;
-            wn.rb = nodes[n.r].bbox;
-            wn.l[s] = n.l;
-            wn.r[s] = n.r;
-            if(wn.l[s] == wn.r[s]) {
-                wn.l[s] = -n.start;
-                wn.r[s] = -n.size;
-            }
-            s++;
-        } else {
-            s = gather(n, nodes[n.l], s, d + 1);
-            s = gather(n, nodes[n.r], s, d + 1);
-        }
-        return s;
     }
 
 private:

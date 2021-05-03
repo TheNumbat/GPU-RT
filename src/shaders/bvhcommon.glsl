@@ -7,6 +7,8 @@
 #define DBL_MAX 1.7976931348623158e+308
 #define DBL_MIN 2.2250738585072014e-308
 
+#pragma optionNV (unroll all)
+
 layout (local_size_x = 32) in;
 
 struct Triangle {

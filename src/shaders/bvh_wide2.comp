@@ -1,0 +1,22 @@
+
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_GOOGLE_include_directive : enable
+
+#include "bvhcommon.glsl"
+
+#define WIDTH 4
+
+struct WideNode {
+	vec4 bmin[WIDTH];
+    vec4 bmax[WIDTH];
+	int next[WIDTH];
+    int leaf[WIDTH];
+};
+
+layout (binding = 3, std430) readonly buffer Nodes
+{
+	WideNode nodes[];
+};
+
+#include "bvh_wide.glsl"

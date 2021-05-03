@@ -14,6 +14,8 @@ void BVHPipe::recreate() {
     brute_pipe.drop();
     stack_pipe.drop();
     rt_pipe.drop();
+    for(auto& w : wide_pipe)
+        w.drop();
     sbt.drop();
     create_desc();
     create_pipe();
@@ -24,6 +26,8 @@ void BVHPipe::destroy() {
     brute_pipe.drop();
     stack_pipe.drop();
     rt_pipe.drop();
+    for(auto& w : wide_pipe)
+        w.drop();
     sbt.drop();
 }
 
@@ -65,6 +69,54 @@ void BVHPipe::create_pipe() {
 
         VK_CHECK(vkCreateComputePipelines(vk().device(), nullptr, 1, &info, nullptr,
                                           &threaded_pipe->pipe));
+    }
+
+    for(int w = 0; w < WIDE_PIPES; w++) {
+
+        int width = 1 << (w + 1);
+        wide_pipe[w]->destroy_swap();
+
+        VkSpecializationMapEntry spec_map[1];
+        spec_map[0].constantID = 0;
+        spec_map[0].offset = 0;
+        spec_map[0].size = sizeof(width);
+
+        VkSpecializationInfo spec = {};
+        spec.dataSize = sizeof(width);
+        spec.pData = &width;
+        spec.mapEntryCount = 1;
+        spec.pMapEntries = spec_map;
+
+        Shader wide(File::read("shaders/bvh_wide" + std::to_string(w+1) + ".comp.spv").value());
+        VkPipelineShaderStageCreateInfo stage_info = {};
+        stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stage_info.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+        stage_info.module = wide.shader;
+        stage_info.pName = "main";
+        stage_info.pSpecializationInfo = &spec;
+
+        VkPushConstantRange pushes = {};
+        pushes.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        pushes.size = sizeof(Constants);
+        pushes.offset = 0;
+
+        VkPipelineLayoutCreateInfo layout_info = {};
+        layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        layout_info.setLayoutCount = 1;
+        layout_info.pSetLayouts = &wide_pipe[w]->d_layout;
+        layout_info.pushConstantRangeCount = 1;
+        layout_info.pPushConstantRanges = &pushes;
+
+        VK_CHECK(
+            vkCreatePipelineLayout(vk().device(), &layout_info, nullptr, &wide_pipe[w]->p_layout));
+
+        VkComputePipelineCreateInfo info = {};
+        info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+        info.stage = stage_info;
+        info.layout = wide_pipe[w]->p_layout;
+
+        VK_CHECK(vkCreateComputePipelines(vk().device(), nullptr, 1, &info, nullptr,
+                                          &wide_pipe[w]->pipe));
     }
 
     {
@@ -258,23 +310,30 @@ VkWriteDescriptorSet BVHPipe::write_buf(const Buffer& buf, const PipeData& pipe,
 
 void BVHPipe::build(const Mesh& mesh, int leaf_size) {
     bvh.build(mesh, leaf_size);
+    wbvh1 = bvh.make_wide<1>();
+    wbvh2 = bvh.make_wide<2>();
+    wbvh3 = bvh.make_wide<3>();
+    wbvh4 = bvh.make_wide<4>();
     BLAS.clear();
     BLAS.push_back(Accel(mesh));
     TLAS->recreate(BLAS, {Mat4::I});
 }
 
-std::vector<Vec4> BVHPipe::cpqs(BVH_Type type, const std::vector<Vec4>& queries, std::chrono::milliseconds& time) {
+std::vector<Vec4> BVHPipe::cpqs(BVH_Type type, const std::vector<Vec4>& queries, std::chrono::milliseconds& time, int w) {
     switch(type) {
     case BVH_Type::none: return run_brute(queries, false, time);
     case BVH_Type::threaded: return run_threaded(queries, false, time);
     case BVH_Type::stack: return run_stack(queries, false, false, time);
     case BVH_Type::stackless: return run_stack(queries, false, true, time);
+    case BVH_Type::wide: return run_wide(queries, false, 0, time, w);
+    case BVH_Type::wide_max: return run_wide(queries, false, 1, time, w);
+    case BVH_Type::wide_sort: return run_wide(queries, false, 2, time, w);
     case BVH_Type::RTX: return {};
     default: assert(false);
     }
 }
 
-std::vector<Vec4> BVHPipe::rays(BVH_Type type, const std::vector<std::pair<Vec4, Vec4>>& queries, std::chrono::milliseconds& time) {
+std::vector<Vec4> BVHPipe::rays(BVH_Type type, const std::vector<std::pair<Vec4, Vec4>>& queries, std::chrono::milliseconds& time, int w) {
     std::vector<Vec4> q(queries.size() * 2);
     for(int i = 0; i < queries.size(); i++) {
         q[2 * i] = queries[i].first;
@@ -285,6 +344,9 @@ std::vector<Vec4> BVHPipe::rays(BVH_Type type, const std::vector<std::pair<Vec4,
     case BVH_Type::threaded: return run_threaded(q, true, time);
     case BVH_Type::stack: return run_stack(q, true, false, time);
     case BVH_Type::stackless: return run_stack(q, true, true, time);
+    case BVH_Type::wide: return run_wide(q, true, 0, time, w);
+    case BVH_Type::wide_max: return run_wide(q, true, 1, time, w);
+    case BVH_Type::wide_sort: return run_wide(q, true, 2, time, w);
     case BVH_Type::RTX: return run_rtx(q, time);
     default: assert(false);
     }
@@ -511,6 +573,89 @@ std::vector<Vec4> BVHPipe::run_stack(const std::vector<Vec4>& queries, bool rays
     return output;
 }
 
+std::pair<void*,size_t> BVHPipe::pick_wide_bvh(int w) {
+    switch(w) {
+    case 0: return {wbvh1.nodes.data(), wbvh1.nodes.size() * sizeof(wbvh1.nodes[0])};
+    case 1: return {wbvh2.nodes.data(), wbvh2.nodes.size() * sizeof(wbvh2.nodes[0])};
+    case 2: return {wbvh3.nodes.data(), wbvh3.nodes.size() * sizeof(wbvh3.nodes[0])};
+    case 3: return {wbvh4.nodes.data(), wbvh4.nodes.size() * sizeof(wbvh4.nodes[0])};
+    }
+    assert(false);
+    return {};
+}
+
+std::vector<Vec4> BVHPipe::run_wide(const std::vector<Vec4>& queries, bool rays,
+                                     int sort, std::chrono::milliseconds& time, int _w) {
+
+    assert(_w >= 1 && _w <= 4);
+    int w = _w - 1;
+
+    const auto& bvh_tris = bvh.get_triangles();
+    auto [nodes, n_size] = pick_wide_bvh(w);
+
+    std::vector<GPU_Tri> triangles;
+    triangles.reserve(bvh_tris.size());
+
+    for(const auto& t : bvh_tris) {
+        triangles.push_back({Vec4{t.v0, 0.0f}, Vec4{t.v1, 0.0f}, Vec4{t.v2, 0.0f}});
+    }
+
+    size_t q_size = queries.size() * sizeof(Vec4);
+    size_t t_size = triangles.size() * sizeof(GPU_Tri);
+    size_t o_size = rays ? q_size / 2 : q_size;
+
+    Buffer g_queries(q_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                     VMA_MEMORY_USAGE_GPU_ONLY);
+    g_queries.write_staged(queries.data(), q_size);
+
+    Buffer g_tris(t_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                  VMA_MEMORY_USAGE_GPU_ONLY);
+    g_tris.write_staged(triangles.data(), t_size);
+
+    Buffer g_nodes(n_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                   VMA_MEMORY_USAGE_GPU_ONLY);
+    g_nodes.write_staged(nodes, n_size);
+
+    Buffer g_output(o_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                    VMA_MEMORY_USAGE_GPU_ONLY);
+
+    {
+        VkWriteDescriptorSet writes[] = {
+            write_buf(g_queries, wide_pipe[w], 0), write_buf(g_output, wide_pipe[w], 1),
+            write_buf(g_tris, wide_pipe[w], 2), write_buf(g_nodes, wide_pipe[w], 3)};
+        vkUpdateDescriptorSets(vk().device(), 4, writes, 0, nullptr);
+
+        VkCommandBuffer cmds = vk().begin_one_time();
+
+        vkCmdBindDescriptorSets(cmds, VK_PIPELINE_BIND_POINT_COMPUTE, wide_pipe[w]->p_layout, 0, 1,
+                                &wide_pipe[w]->descriptor_sets[vk().frame()], 0, nullptr);
+        vkCmdBindPipeline(cmds, VK_PIPELINE_BIND_POINT_COMPUTE, wide_pipe[w]->pipe);
+        
+        Constants consts;
+        consts.n_tris = triangles.size();
+        consts.trace_rays = rays;
+        consts.start = 0;
+        consts.sort_children = sort;
+        
+        vkCmdPushConstants(cmds, wide_pipe[w]->p_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
+                            sizeof(consts), &consts);
+        vkCmdDispatch(cmds, rays ? queries.size() / 2 : queries.size(), 1, 1);
+            
+        auto t1 = std::chrono::high_resolution_clock::now();
+        vk().end_one_time(cmds);
+        auto t2 = std::chrono::high_resolution_clock::now();
+        time = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
+    }
+
+    std::vector<Vec4> output(rays ? queries.size() / 2 : queries.size());
+
+    Buffer c_output(o_size, VK_IMAGE_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+    g_output.copy_to(c_output);
+    c_output.read(output.data(), o_size);
+
+    return output;
+}
+
 std::vector<Vec4> BVHPipe::run_rtx(const std::vector<Vec4>& queries, std::chrono::milliseconds& time) {
 
     const auto& bvh_tris = bvh.get_triangles();
@@ -630,6 +775,54 @@ void BVHPipe::create_desc() {
         threaded_pipe->descriptor_sets.resize(Manager::MAX_IN_FLIGHT);
         VK_CHECK(vkAllocateDescriptorSets(vk().device(), &alloc_info,
                                           threaded_pipe->descriptor_sets.data()));
+    }
+
+    for(int w = 0; w < WIDE_PIPES; w++) { // WIDE
+        VkDescriptorSetLayoutBinding i_bind = {};
+        i_bind.binding = 0;
+        i_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        i_bind.descriptorCount = 1;
+        i_bind.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+        VkDescriptorSetLayoutBinding o_bind = {};
+        o_bind.binding = 1;
+        o_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        o_bind.descriptorCount = 1;
+        o_bind.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+        VkDescriptorSetLayoutBinding v_bind = {};
+        v_bind.binding = 2;
+        v_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        v_bind.descriptorCount = 1;
+        v_bind.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+        VkDescriptorSetLayoutBinding id_bind = {};
+        id_bind.binding = 3;
+        id_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        id_bind.descriptorCount = 1;
+        id_bind.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+        VkDescriptorSetLayoutBinding bindings[] = {i_bind, o_bind, v_bind, id_bind};
+
+        VkDescriptorSetLayoutCreateInfo layout_info = {};
+        layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        layout_info.bindingCount = 4;
+        layout_info.pBindings = bindings;
+
+        VK_CHECK(vkCreateDescriptorSetLayout(vk().device(), &layout_info, nullptr,
+                                             &wide_pipe[w]->d_layout));
+
+        std::vector<VkDescriptorSetLayout> layouts(Manager::MAX_IN_FLIGHT, wide_pipe[w]->d_layout);
+
+        VkDescriptorSetAllocateInfo alloc_info = {};
+        alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        alloc_info.descriptorPool = vk().pool();
+        alloc_info.descriptorSetCount = Manager::MAX_IN_FLIGHT;
+        alloc_info.pSetLayouts = layouts.data();
+
+        wide_pipe[w]->descriptor_sets.resize(Manager::MAX_IN_FLIGHT);
+        VK_CHECK(vkAllocateDescriptorSets(vk().device(), &alloc_info,
+                                          wide_pipe[w]->descriptor_sets.data()));
     }
 
     { // STACK

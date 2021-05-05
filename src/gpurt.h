@@ -57,6 +57,11 @@ private:
     Window& window;
     Scene scene;
 
+    std::vector<Vec4> f_queries;
+    std::vector<Vec4> f_reference;
+    std::vector<std::pair<Vec4, Vec4>> f_rqueries;
+    std::vector<Vec4> f_rreference;
+
     std::vector<VK::Drop<VK::Accel>> BLAS;
     std::vector<Mat4> BLAS_T;
     VK::Drop<VK::Accel> TLAS;

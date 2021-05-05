@@ -97,6 +97,45 @@ GPURT::GPURT(Window& window, std::string scene_file) : window(window), cam(windo
 
     scene.load(Scene::Load_Opts(), scene_file, cam);
 
+    std::ifstream fin_queries("queries.txt");
+    while(fin_queries.good()) {
+        Vec4 q;
+        fin_queries >> q.x >> q.y >> q.z;
+        if(fin_queries.good()) f_queries.push_back(q);
+        if(f_queries.size() >= QUERY_MAX) break;
+    }
+
+    std::ifstream fin_points("points.txt");
+    while(fin_points.good()) {
+        Vec4 q;
+        fin_points >> q.x >> q.y >> q.z;
+        if(fin_points.good()) f_reference.push_back(q);
+        if(f_reference.size() >= QUERY_MAX) break;
+    }
+
+    assert(f_queries.size() == f_reference.size());
+
+    std::ifstream fin_rqueries("rqueries.txt");
+    while(fin_rqueries.good()) {
+        Vec4 o, d;
+        fin_rqueries >> o.x >> o.y >> o.z;
+        fin_rqueries >> d.x >> d.y >> d.z;
+        if(fin_rqueries.good()) f_rqueries.push_back({o, d});
+        if(f_rqueries.size() >= QUERY_MAX) break;
+    }
+
+    std::ifstream fin_rpoints("rpoints.txt");
+    while(fin_rpoints.good()) {
+        int ok;
+        Vec4 q;
+        fin_rpoints >> ok >> q.x >> q.y >> q.z;
+        if(!ok) q.x = q.y = q.z = INFINITY;
+        if(fin_rpoints.good()) f_rreference.push_back(q);
+        if(f_rreference.size() >= QUERY_MAX) break;
+    }
+
+    assert(f_rqueries.size() == f_rreference.size());
+
     build_images();
     build_pass();
     build_pipe();
@@ -119,7 +158,7 @@ GPURT::GPURT(Window& window, std::string scene_file) : window(window), cam(windo
     std::cout << "Benchmarking random coherent: " << std::endl;
     benchmark_rng();
     std::cout << "Benchmarking primary rays: " << std::endl;
-    benchmark_primary();
+    // benchmark_primary();
 }
 
 GPURT::~GPURT() {
@@ -206,91 +245,46 @@ void GPURT::benchmark_rng() {
 
 void GPURT::run_tests() {
 
-    std::vector<Vec4> queries;
-    std::vector<Vec4> reference;
+    test_cpq(f_queries, f_reference, true, VK::BVH_Type::none);
+    test_cpq(f_queries, f_reference, true, VK::BVH_Type::threaded);
+    test_cpq(f_queries, f_reference, true, VK::BVH_Type::stack);
+    test_cpq(f_queries, f_reference, true, VK::BVH_Type::stackless);
+    test_cpq(f_queries, f_reference, true, VK::BVH_Type::wide, 1);
+    test_cpq(f_queries, f_reference, true, VK::BVH_Type::wide, 2);
+    test_cpq(f_queries, f_reference, true, VK::BVH_Type::wide, 3);
+    test_cpq(f_queries, f_reference, true, VK::BVH_Type::wide, 4);
+    test_cpq(f_queries, f_reference, true, VK::BVH_Type::wide_max, 2);
+    test_cpq(f_queries, f_reference, true, VK::BVH_Type::wide_max, 3);
+    test_cpq(f_queries, f_reference, true, VK::BVH_Type::wide_max, 4);
+    test_cpq(f_queries, f_reference, true, VK::BVH_Type::wide_sort, 2);
+    test_cpq(f_queries, f_reference, true, VK::BVH_Type::wide_sort, 3);
+    test_cpq(f_queries, f_reference, true, VK::BVH_Type::wide_sort, 4);
+    test_cpq(f_queries, f_reference, true, VK::BVH_Type::obb);
+    test_cpq(f_queries, f_reference, true, VK::BVH_Type::obb_stackless);
 
-    std::ifstream f_queries("queries.txt");
-    while(f_queries.good()) {
-        Vec4 q;
-        f_queries >> q.x >> q.y >> q.z;
-        if(f_queries.good()) queries.push_back(q);
-        if(queries.size() >= QUERY_MAX) break;
-    }
-
-    std::ifstream f_points("points.txt");
-    while(f_points.good()) {
-        Vec4 q;
-        f_points >> q.x >> q.y >> q.z;
-        if(f_points.good()) reference.push_back(q);
-        if(reference.size() >= QUERY_MAX) break;
-    }
-
-    assert(queries.size() == reference.size());
-
-    std::vector<std::pair<Vec4, Vec4>> rqueries;
-    std::vector<Vec4> rreference;
-
-    std::ifstream f_rqueries("rqueries.txt");
-    while(f_rqueries.good()) {
-        Vec4 o, d;
-        f_rqueries >> o.x >> o.y >> o.z;
-        f_rqueries >> d.x >> d.y >> d.z;
-        if(f_rqueries.good()) rqueries.push_back({o, d});
-        if(rqueries.size() >= QUERY_MAX) break;
-    }
-
-    std::ifstream f_rpoints("rpoints.txt");
-    while(f_rpoints.good()) {
-        int ok;
-        Vec4 q;
-        f_rpoints >> ok >> q.x >> q.y >> q.z;
-        if(!ok) q.x = q.y = q.z = INFINITY;
-        if(f_rpoints.good()) rreference.push_back(q);
-        if(rreference.size() >= QUERY_MAX) break;
-    }
-
-    assert(rqueries.size() == rreference.size());
-
-    test_cpq(queries, reference, true, VK::BVH_Type::none);
-    test_cpq(queries, reference, true, VK::BVH_Type::threaded);
-    test_cpq(queries, reference, true, VK::BVH_Type::stack);
-    test_cpq(queries, reference, true, VK::BVH_Type::stackless);
-    test_cpq(queries, reference, true, VK::BVH_Type::wide, 1);
-    test_cpq(queries, reference, true, VK::BVH_Type::wide, 2);
-    test_cpq(queries, reference, true, VK::BVH_Type::wide, 3);
-    test_cpq(queries, reference, true, VK::BVH_Type::wide, 4);
-    test_cpq(queries, reference, true, VK::BVH_Type::wide_max, 2);
-    test_cpq(queries, reference, true, VK::BVH_Type::wide_max, 3);
-    test_cpq(queries, reference, true, VK::BVH_Type::wide_max, 4);
-    test_cpq(queries, reference, true, VK::BVH_Type::wide_sort, 2);
-    test_cpq(queries, reference, true, VK::BVH_Type::wide_sort, 3);
-    test_cpq(queries, reference, true, VK::BVH_Type::wide_sort, 4);
-    test_cpq(queries, reference, true, VK::BVH_Type::obb);
-    test_cpq(queries, reference, true, VK::BVH_Type::obb_stackless);
-
-    test_ray(rqueries, rreference, true, VK::BVH_Type::none);
-    test_ray(rqueries, rreference, true, VK::BVH_Type::threaded);
-    test_ray(rqueries, rreference, true, VK::BVH_Type::stack);
-    test_ray(rqueries, rreference, true, VK::BVH_Type::stackless);
-    test_ray(rqueries, rreference, true, VK::BVH_Type::RTX);
-    test_ray(rqueries, rreference, true, VK::BVH_Type::wide, 1);
-    test_ray(rqueries, rreference, true, VK::BVH_Type::wide, 2);
-    test_ray(rqueries, rreference, true, VK::BVH_Type::wide, 3);
-    test_ray(rqueries, rreference, true, VK::BVH_Type::wide, 4);
-    test_ray(rqueries, rreference, true, VK::BVH_Type::wide_max, 2);
-    test_ray(rqueries, rreference, true, VK::BVH_Type::wide_max, 3);
-    test_ray(rqueries, rreference, true, VK::BVH_Type::wide_max, 4);
-    test_ray(rqueries, rreference, true, VK::BVH_Type::wide_sort, 2);
-    test_ray(rqueries, rreference, true, VK::BVH_Type::wide_sort, 3);
-    test_ray(rqueries, rreference, true, VK::BVH_Type::wide_sort, 4);
-    test_ray(rqueries, rreference, true, VK::BVH_Type::obb);
-    test_ray(rqueries, rreference, true, VK::BVH_Type::obb_stackless);
+    test_ray(f_rqueries, f_rreference, true, VK::BVH_Type::none);
+    test_ray(f_rqueries, f_rreference, true, VK::BVH_Type::threaded);
+    test_ray(f_rqueries, f_rreference, true, VK::BVH_Type::stack);
+    test_ray(f_rqueries, f_rreference, true, VK::BVH_Type::stackless);
+    test_ray(f_rqueries, f_rreference, true, VK::BVH_Type::RTX);
+    test_ray(f_rqueries, f_rreference, true, VK::BVH_Type::wide, 1);
+    test_ray(f_rqueries, f_rreference, true, VK::BVH_Type::wide, 2);
+    test_ray(f_rqueries, f_rreference, true, VK::BVH_Type::wide, 3);
+    test_ray(f_rqueries, f_rreference, true, VK::BVH_Type::wide, 4);
+    test_ray(f_rqueries, f_rreference, true, VK::BVH_Type::wide_max, 2);
+    test_ray(f_rqueries, f_rreference, true, VK::BVH_Type::wide_max, 3);
+    test_ray(f_rqueries, f_rreference, true, VK::BVH_Type::wide_max, 4);
+    test_ray(f_rqueries, f_rreference, true, VK::BVH_Type::wide_sort, 2);
+    test_ray(f_rqueries, f_rreference, true, VK::BVH_Type::wide_sort, 3);
+    test_ray(f_rqueries, f_rreference, true, VK::BVH_Type::wide_sort, 4);
+    test_ray(f_rqueries, f_rreference, true, VK::BVH_Type::obb);
+    test_ray(f_rqueries, f_rreference, true, VK::BVH_Type::obb_stackless);
 }
 
 void GPURT::test_cpq(const std::vector<Vec4>& queries, const std::vector<Vec4>& reference,
                      bool print, VK::BVH_Type type, int w) {
 
-    std::chrono::milliseconds ms_int;
+    int ms_int = 0;
     auto output = bvh_pipe.cpqs(type, queries, ms_int, w);
 
     if(print) {
@@ -313,7 +307,7 @@ void GPURT::test_cpq(const std::vector<Vec4>& queries, const std::vector<Vec4>& 
 void GPURT::test_ray(const std::vector<std::pair<Vec4, Vec4>>& queries,
                      const std::vector<Vec4>& reference, bool print, VK::BVH_Type type, int w) {
 
-    std::chrono::milliseconds ms_int;
+    int ms_int = 0;
     auto output = bvh_pipe.rays(type, queries, ms_int, w);
 
     if(print) {
@@ -336,14 +330,14 @@ void GPURT::test_ray(const std::vector<std::pair<Vec4, Vec4>>& queries,
 
 void GPURT::time_cpqs(const std::vector<Vec4>& queries, VK::BVH_Type type, int w) {
 
-    std::chrono::milliseconds ms_int;
+    int ms_int = 0;
     auto output = bvh_pipe.cpqs(type, queries, ms_int, w);
     std::cout << bvh_name(type, w) << queries.size() << " CPQs done in " << ms_int << std::endl;
 }
 
 void GPURT::time_rays(const std::vector<std::pair<Vec4, Vec4>>& queries, VK::BVH_Type type, int w) {
 
-    std::chrono::milliseconds ms_int;
+    int ms_int = 0;
     auto output = bvh_pipe.rays(type, queries, ms_int, w);
     std::cout << bvh_name(type, w) << queries.size() << " rays done in " << ms_int << std::endl;
 }
@@ -358,6 +352,8 @@ void GPURT::render() {
     if(use_rt) {
 
         // run_tests();
+        // benchmark_rng();
+        
         build_accel();
 
         rt_pipe.use_image(f.rt_target_view);

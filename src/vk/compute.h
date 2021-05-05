@@ -35,8 +35,8 @@ struct BVHPipe {
     void build(const Mesh& mesh, int leaf_size);
     BBox box();
 
-    std::vector<Vec4> cpqs(BVH_Type type, const std::vector<Vec4>& queries, std::chrono::milliseconds& time, int w = 1);
-    std::vector<Vec4> rays(BVH_Type type, const std::vector<std::pair<Vec4, Vec4>>& queries, std::chrono::milliseconds& time, int w = 1);
+    std::vector<Vec4> cpqs(BVH_Type type, const std::vector<Vec4>& queries, int& time, int w = 1);
+    std::vector<Vec4> rays(BVH_Type type, const std::vector<std::pair<Vec4, Vec4>>& queries, int& time, int w = 1);
 
     Drop<PipeData> threaded_pipe;
     Drop<PipeData> brute_pipe;
@@ -56,6 +56,8 @@ private:
     WBVH<2> wbvh2;
     WBVH<3> wbvh3;
     WBVH<4> wbvh4;
+
+    VkQueryPool querypool;
 
     std::vector<Drop<Accel>> BLAS;
     Drop<Accel> TLAS;
@@ -87,12 +89,12 @@ private:
         int sort_children = 0;
     };
 
-    std::vector<Vec4> run_threaded(const std::vector<Vec4>& queries, bool rays, std::chrono::milliseconds& time);
-    std::vector<Vec4> run_brute(const std::vector<Vec4>& queries, bool rays, std::chrono::milliseconds& time);
-    std::vector<Vec4> run_stack(const std::vector<Vec4>& queries, bool rays, bool stackless, std::chrono::milliseconds& time);
-    std::vector<Vec4> run_obb(const std::vector<Vec4>& queries, bool rays, bool stackless, std::chrono::milliseconds& time);
-    std::vector<Vec4> run_rtx(const std::vector<Vec4>& queries, std::chrono::milliseconds& time);
-    std::vector<Vec4> run_wide(const std::vector<Vec4>& queries, bool rays, int sort, std::chrono::milliseconds& time, int w);
+    std::vector<Vec4> run_threaded(const std::vector<Vec4>& queries, bool rays, int& time);
+    std::vector<Vec4> run_brute(const std::vector<Vec4>& queries, bool rays, int& time);
+    std::vector<Vec4> run_stack(const std::vector<Vec4>& queries, bool rays, bool stackless, int& time);
+    std::vector<Vec4> run_obb(const std::vector<Vec4>& queries, bool rays, bool stackless, int& time);
+    std::vector<Vec4> run_rtx(const std::vector<Vec4>& queries, int& time);
+    std::vector<Vec4> run_wide(const std::vector<Vec4>& queries, bool rays, int sort, int& time, int w);
 
     std::pair<void*,size_t> pick_wide_bvh(int w);
 

@@ -10,6 +10,13 @@ BVHPipe::~BVHPipe() {
 }
 
 void BVHPipe::recreate() {
+    
+    VkQueryPoolCreateInfo query = {};
+    query.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+    query.queryType = VK_QUERY_TYPE_TIMESTAMP;
+    query.queryCount = 2;
+    vkCreateQueryPool(vk().device(), &query, nullptr, &querypool);
+    
     threaded_pipe.drop();
     brute_pipe.drop();
     stack_pipe.drop();
@@ -23,6 +30,8 @@ void BVHPipe::recreate() {
 }
 
 void BVHPipe::destroy() {
+
+    vkDestroyQueryPool(vk().device(), querypool, nullptr);
     threaded_pipe.drop();
     brute_pipe.drop();
     stack_pipe.drop();
@@ -356,7 +365,7 @@ void BVHPipe::build(const Mesh& mesh, int leaf_size) {
     TLAS->recreate(BLAS, {Mat4::I});
 }
 
-std::vector<Vec4> BVHPipe::cpqs(BVH_Type type, const std::vector<Vec4>& queries, std::chrono::milliseconds& time, int w) {
+std::vector<Vec4> BVHPipe::cpqs(BVH_Type type, const std::vector<Vec4>& queries, int& time, int w) {
     switch(type) {
     case BVH_Type::none: return run_brute(queries, false, time);
     case BVH_Type::threaded: return run_threaded(queries, false, time);
@@ -372,7 +381,7 @@ std::vector<Vec4> BVHPipe::cpqs(BVH_Type type, const std::vector<Vec4>& queries,
     }
 }
 
-std::vector<Vec4> BVHPipe::rays(BVH_Type type, const std::vector<std::pair<Vec4, Vec4>>& queries, std::chrono::milliseconds& time, int w) {
+std::vector<Vec4> BVHPipe::rays(BVH_Type type, const std::vector<std::pair<Vec4, Vec4>>& queries, int& time, int w) {
     std::vector<Vec4> q(queries.size() * 2);
     for(int i = 0; i < queries.size(); i++) {
         q[2 * i] = queries[i].first;
@@ -393,7 +402,7 @@ std::vector<Vec4> BVHPipe::rays(BVH_Type type, const std::vector<std::pair<Vec4,
     }
 }
 
-std::vector<Vec4> BVHPipe::run_brute(const std::vector<Vec4>& queries, bool rays, std::chrono::milliseconds& time) {
+std::vector<Vec4> BVHPipe::run_brute(const std::vector<Vec4>& queries, bool rays, int& time) {
 
     const auto& bvh_tris = bvh.get_triangles();
     std::vector<GPU_Tri> triangles;
@@ -437,12 +446,18 @@ std::vector<Vec4> BVHPipe::run_brute(const std::vector<Vec4>& queries, bool rays
         vkCmdBindPipeline(cmds, VK_PIPELINE_BIND_POINT_COMPUTE, brute_pipe->pipe);
         vkCmdPushConstants(cmds, brute_pipe->p_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
                            sizeof(consts), &consts);
-        vkCmdDispatch(cmds, n_queries, 1, 1);
 
-        auto t1 = std::chrono::high_resolution_clock::now();
+        vkResetQueryPool(vk().device(), querypool, 0, 2);
+
+        vkCmdWriteTimestamp(cmds, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, querypool, 0);
+        vkCmdDispatch(cmds, n_queries, 1, 1);
+        vkCmdWriteTimestamp(cmds, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, querypool, 1);
+
         vk().end_one_time(cmds);
-        auto t2 = std::chrono::high_resolution_clock::now();
-        time = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
+
+        size_t data[2];
+        vkGetQueryPoolResults(vk().device(), querypool, 0, 2, 2 * sizeof(size_t), data, sizeof(size_t), VK_QUERY_RESULT_WAIT_BIT | VK_QUERY_RESULT_64_BIT);
+        time = (data[1] - data[0]) / 1000000;
     }
 
     std::vector<Vec4> output(rays ? n_queries / 2 : n_queries);
@@ -455,7 +470,7 @@ std::vector<Vec4> BVHPipe::run_brute(const std::vector<Vec4>& queries, bool rays
 }
 
 std::vector<Vec4> BVHPipe::run_threaded(const std::vector<Vec4>& queries,
-                                        bool rays, std::chrono::milliseconds& time) {
+                                        bool rays, int& time) {
 
     const auto& bvh_nodes = bvh.get_nodes();
     const auto& bvh_tris = bvh.get_triangles();
@@ -512,12 +527,19 @@ std::vector<Vec4> BVHPipe::run_threaded(const std::vector<Vec4>& queries,
 
         vkCmdPushConstants(cmds, threaded_pipe->p_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
                             sizeof(consts), &consts);
-        vkCmdDispatch(cmds, rays ? queries.size() / 2 : queries.size(), 1, 1);
+
         
-        auto t1 = std::chrono::high_resolution_clock::now();
+        vkResetQueryPool(vk().device(), querypool, 0, 2);
+
+        vkCmdWriteTimestamp(cmds, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, querypool, 0);
+        vkCmdDispatch(cmds, rays ? queries.size() / 2 : queries.size(), 1, 1);
+        vkCmdWriteTimestamp(cmds, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, querypool, 1);
+
         vk().end_one_time(cmds);
-        auto t2 = std::chrono::high_resolution_clock::now();
-        time = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
+
+        size_t data[2];
+        vkGetQueryPoolResults(vk().device(), querypool, 0, 2, 2 * sizeof(size_t), data, sizeof(size_t), VK_QUERY_RESULT_WAIT_BIT | VK_QUERY_RESULT_64_BIT);
+        time = (data[1] - data[0]) / 1000000;
     }
 
     std::vector<Vec4> output(rays ? queries.size() / 2 : queries.size());
@@ -530,7 +552,7 @@ std::vector<Vec4> BVHPipe::run_threaded(const std::vector<Vec4>& queries,
 }
 
 std::vector<Vec4> BVHPipe::run_stack(const std::vector<Vec4>& queries, bool rays,
-                                     bool stackless, std::chrono::milliseconds& time) {
+                                     bool stackless, int& time) {
 
     const auto& bvh_nodes = bvh.get_nodes();
     const auto& bvh_tris = bvh.get_triangles();
@@ -598,12 +620,18 @@ std::vector<Vec4> BVHPipe::run_stack(const std::vector<Vec4>& queries, bool rays
 
         vkCmdPushConstants(cmds, stack_pipe->p_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
                             sizeof(consts), &consts);
+
+        vkResetQueryPool(vk().device(), querypool, 0, 2);
+
+        vkCmdWriteTimestamp(cmds, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, querypool, 0);
         vkCmdDispatch(cmds, rays ? queries.size() / 2 : queries.size(), 1, 1);
-            
-        auto t1 = std::chrono::high_resolution_clock::now();
+        vkCmdWriteTimestamp(cmds, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, querypool, 1);
+
         vk().end_one_time(cmds);
-        auto t2 = std::chrono::high_resolution_clock::now();
-        time = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
+
+        size_t data[2];
+        vkGetQueryPoolResults(vk().device(), querypool, 0, 2, 2 * sizeof(size_t), data, sizeof(size_t), VK_QUERY_RESULT_WAIT_BIT | VK_QUERY_RESULT_64_BIT);
+        time = (data[1] - data[0]) / 1000000;
     }
 
     std::vector<Vec4> output(rays ? queries.size() / 2 : queries.size());
@@ -616,7 +644,7 @@ std::vector<Vec4> BVHPipe::run_stack(const std::vector<Vec4>& queries, bool rays
 }
 
 std::vector<Vec4> BVHPipe::run_obb(const std::vector<Vec4>& queries, bool rays,
-                                     bool stackless, std::chrono::milliseconds& time) {
+                                     bool stackless, int& time) {
 
     const auto& bvh_nodes = obbbvh.get_nodes();
     const auto& bvh_tris = obbbvh.get_triangles();
@@ -683,12 +711,18 @@ std::vector<Vec4> BVHPipe::run_obb(const std::vector<Vec4>& queries, bool rays,
 
         vkCmdPushConstants(cmds, obb_pipe->p_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
                             sizeof(consts), &consts);
+
+        vkResetQueryPool(vk().device(), querypool, 0, 2);
+
+        vkCmdWriteTimestamp(cmds, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, querypool, 0);
         vkCmdDispatch(cmds, rays ? queries.size() / 2 : queries.size(), 1, 1);
-            
-        auto t1 = std::chrono::high_resolution_clock::now();
+        vkCmdWriteTimestamp(cmds, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, querypool, 1);
+
         vk().end_one_time(cmds);
-        auto t2 = std::chrono::high_resolution_clock::now();
-        time = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
+
+        size_t data[2];
+        vkGetQueryPoolResults(vk().device(), querypool, 0, 2, 2 * sizeof(size_t), data, sizeof(size_t), VK_QUERY_RESULT_WAIT_BIT | VK_QUERY_RESULT_64_BIT);
+        time = (data[1] - data[0]) / 1000000;
     }
 
     std::vector<Vec4> output(rays ? queries.size() / 2 : queries.size());
@@ -712,7 +746,7 @@ std::pair<void*,size_t> BVHPipe::pick_wide_bvh(int w) {
 }
 
 std::vector<Vec4> BVHPipe::run_wide(const std::vector<Vec4>& queries, bool rays,
-                                     int sort, std::chrono::milliseconds& time, int _w) {
+                                     int sort, int& time, int _w) {
 
     assert(_w >= 1 && _w <= 4);
     int w = _w - 1;
@@ -766,12 +800,18 @@ std::vector<Vec4> BVHPipe::run_wide(const std::vector<Vec4>& queries, bool rays,
         
         vkCmdPushConstants(cmds, wide_pipe[w]->p_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
                             sizeof(consts), &consts);
+
+        vkResetQueryPool(vk().device(), querypool, 0, 2);
+
+        vkCmdWriteTimestamp(cmds, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, querypool, 0);
         vkCmdDispatch(cmds, rays ? queries.size() / 2 : queries.size(), 1, 1);
-            
-        auto t1 = std::chrono::high_resolution_clock::now();
+        vkCmdWriteTimestamp(cmds, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, querypool, 1);
+
         vk().end_one_time(cmds);
-        auto t2 = std::chrono::high_resolution_clock::now();
-        time = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
+
+        size_t data[2];
+        vkGetQueryPoolResults(vk().device(), querypool, 0, 2, 2 * sizeof(size_t), data, sizeof(size_t), VK_QUERY_RESULT_WAIT_BIT | VK_QUERY_RESULT_64_BIT);
+        time = (data[1] - data[0]) / 1000000;
     }
 
     std::vector<Vec4> output(rays ? queries.size() / 2 : queries.size());
@@ -783,7 +823,7 @@ std::vector<Vec4> BVHPipe::run_wide(const std::vector<Vec4>& queries, bool rays,
     return output;
 }
 
-std::vector<Vec4> BVHPipe::run_rtx(const std::vector<Vec4>& queries, std::chrono::milliseconds& time) {
+std::vector<Vec4> BVHPipe::run_rtx(const std::vector<Vec4>& queries, int& time) {
 
     const auto& bvh_tris = bvh.get_triangles();
 
@@ -837,12 +877,18 @@ std::vector<Vec4> BVHPipe::run_rtx(const std::vector<Vec4>& queries, std::chrono
                                     Stride{sbt_addr + 2u * groupSize, groupStride, groupSize}, // hit
                                     Stride{0u, 0u, 0u}};
 
-        vk().rtx.vkCmdTraceRaysKHR(cmds, &addrs[0], &addrs[1], &addrs[2], &addrs[3], queries.size() / 2, 1, 1);
         
-        auto t1 = std::chrono::high_resolution_clock::now();
+        vkResetQueryPool(vk().device(), querypool, 0, 2);
+
+        vkCmdWriteTimestamp(cmds, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, querypool, 0);
+        vk().rtx.vkCmdTraceRaysKHR(cmds, &addrs[0], &addrs[1], &addrs[2], &addrs[3], queries.size() / 2, 1, 1);
+        vkCmdWriteTimestamp(cmds, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, querypool, 1);
+
         vk().end_one_time(cmds);
-        auto t2 = std::chrono::high_resolution_clock::now();
-        time = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
+
+        size_t data[2];
+        vkGetQueryPoolResults(vk().device(), querypool, 0, 2, 2 * sizeof(size_t), data, sizeof(size_t), VK_QUERY_RESULT_WAIT_BIT | VK_QUERY_RESULT_64_BIT);
+        time = (data[1] - data[0]) / 1000000;
     }
 
     std::vector<Vec4> output(queries.size() / 2);

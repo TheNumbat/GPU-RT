@@ -1864,14 +1864,9 @@ void Manager::create_logical_device_and_queues() {
         q_info.push_back(qinfo);
     }
 
-    VkPhysicalDeviceBufferDeviceAddressFeatures buf_features = {};
-    buf_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
-    buf_features.bufferDeviceAddress = VK_TRUE;
-
     VkPhysicalDeviceRayQueryFeaturesKHR ray_features = {};
     ray_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
     ray_features.rayQuery = VK_TRUE;
-    ray_features.pNext = &buf_features;
 
     VkPhysicalDeviceRayTracingPipelineFeaturesKHR rp_features = {};
     rp_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
@@ -1885,10 +1880,16 @@ void Manager::create_logical_device_and_queues() {
     ac_features.accelerationStructure = VK_TRUE;
     ac_features.pNext = &rp_features;
 
+    VkPhysicalDeviceVulkan12Features vk12_features = {};
+    vk12_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+    vk12_features.pNext = &ac_features;
+    vk12_features.hostQueryReset = VK_TRUE;
+    vk12_features.bufferDeviceAddress = VK_TRUE;
+
     VkPhysicalDeviceFeatures2 features2 = {};
     features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     features2.features.samplerAnisotropy = VK_TRUE;
-    features2.pNext = &ac_features;
+    features2.pNext = &vk12_features;
 
     VkDeviceCreateInfo dev_info = {};
     dev_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;

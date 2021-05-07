@@ -14,24 +14,19 @@ VkVertexInputBindingDescription Mesh::Vertex::bind_desc() {
     return desc;
 }
 
-std::array<VkVertexInputAttributeDescription, 3> Mesh::Vertex::attr_descs() {
+std::array<VkVertexInputAttributeDescription, 2> Mesh::Vertex::attr_descs() {
 
-    std::array<VkVertexInputAttributeDescription, 3> ret;
+    std::array<VkVertexInputAttributeDescription, 2> ret;
 
     ret[0].binding = 0;
     ret[0].location = 0;
-    ret[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+    ret[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
     ret[0].offset = offsetof(Vertex, pos);
 
     ret[1].binding = 0;
     ret[1].location = 1;
-    ret[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+    ret[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
     ret[1].offset = offsetof(Vertex, norm);
-
-    ret[2].binding = 0;
-    ret[2].location = 2;
-    ret[2].format = VK_FORMAT_R32G32_SFLOAT;
-    ret[2].offset = offsetof(Vertex, tex_coord);
 
     return ret;
 }
@@ -49,7 +44,7 @@ Mesh& Mesh::operator=(Mesh&& src) {
     _idxs = std::move(src._idxs);
     vbuf = std::move(src.vbuf);
     ibuf = std::move(src.ibuf);
-    dirty = true;
+    dirty = src.dirty;
     src.dirty = true;
     return *this;
 }
@@ -190,7 +185,7 @@ void MeshPipe::create_pipe(const Pass& pass, VkExtent2D ext) {
     raster_info.rasterizerDiscardEnable = VK_FALSE;
     raster_info.polygonMode = VK_POLYGON_MODE_FILL;
     raster_info.lineWidth = 1.0f;
-    raster_info.cullMode = VK_CULL_MODE_BACK_BIT;
+    raster_info.cullMode = VK_CULL_MODE_NONE;
     raster_info.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     raster_info.depthBiasEnable = VK_FALSE;
     raster_info.depthBiasConstantFactor = 0.0f; // Optional
@@ -344,6 +339,41 @@ void RTPipe::recreate(const Scene& scene) {
     create_desc(scene);
     create_pipe();
     create_sbt();
+    build_desc(scene);
+}
+
+void RTPipe::build_desc(const Scene& scene) {
+    
+    std::vector<Scene_Desc> descs;
+    scene.for_objs([&](const Object& obj) {
+        Scene_Desc desc;
+        desc.index = descs.size();
+        desc.model = obj.pose.transform();
+        desc.modelIT = desc.model.inverse().T();
+        descs.push_back(desc);
+    });
+
+    desc_buf.drop();
+    
+    VkDeviceSize size = descs.size() * sizeof(Scene_Desc);
+    desc_buf->recreate(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+    desc_buf->write_staged(descs.data(), size);
+
+    VkDescriptorBufferInfo buf_info = {};
+    buf_info.buffer = desc_buf->buf;
+    buf_info.range = VK_WHOLE_SIZE;
+
+    for(unsigned int i = 0; i < Manager::MAX_IN_FLIGHT; i++) {
+        VkWriteDescriptorSet buf_write = {};
+        buf_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        buf_write.dstSet = pipe->descriptor_sets[i];
+        buf_write.dstBinding = 1;
+        buf_write.dstArrayElement = 0;
+        buf_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        buf_write.descriptorCount = 1;
+        buf_write.pBufferInfo = &buf_info;
+        vkUpdateDescriptorSets(vk().device(), 1, &buf_write, 0, nullptr);
+    }
 }
 
 void RTPipe::destroy() {
@@ -377,7 +407,7 @@ void RTPipe::use_image(const ImageView& out) {
     VkWriteDescriptorSet img_write = {};
     img_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     img_write.dstSet = pipe->descriptor_sets[i];
-    img_write.dstBinding = 4;
+    img_write.dstBinding = 5;
     img_write.dstArrayElement = 0;
     img_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     img_write.descriptorCount = 1;
@@ -396,7 +426,7 @@ void RTPipe::use_accel(const Accel& tlas) {
     VkWriteDescriptorSet acw = {};
     acw.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     acw.dstSet = pipe->descriptor_sets[vk().frame()];
-    acw.dstBinding = 3;
+    acw.dstBinding = 4;
     acw.dstArrayElement = 0;
     acw.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
     acw.descriptorCount = 1;
@@ -405,7 +435,12 @@ void RTPipe::use_accel(const Accel& tlas) {
     vkUpdateDescriptorSets(vk().device(), 1, &acw, 0, nullptr);
 }
 
-void RTPipe::trace(VkCommandBuffer& cmds, VkExtent2D ext) {
+void RTPipe::trace(const Camera& cam, VkCommandBuffer& cmds, VkExtent2D ext) {
+
+    consts.clearColor = Vec4{0.22f, 0.22f, 0.22f, 1.0f};
+    consts.lightIntensity = 1.0f;
+    consts.lightPosition = cam.pos();
+    consts.lightType = 0;
 
     vkCmdBindPipeline(cmds, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipe->pipe);
     vkCmdBindDescriptorSets(cmds, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipe->p_layout, 0, 1,
@@ -464,9 +499,9 @@ void RTPipe::create_pipe() {
 
     pipe->destroy_swap();
 
-    Shader chit(File::read("shaders/rt.rchit.spv").value());
-    Shader miss(File::read("shaders/rt.rmiss.spv").value());
-    Shader gen(File::read("shaders/rt.rgen.spv").value());
+    Shader chit(File::read("shaders/rt/rt.rchit.spv").value());
+    Shader miss(File::read("shaders/rt/rt.rmiss.spv").value());
+    Shader gen(File::read("shaders/rt/rt.rgen.spv").value());
 
     VkRayTracingShaderGroupCreateInfoKHR groups[3] = {};
 
@@ -538,6 +573,8 @@ void RTPipe::create_pipe() {
 
 void RTPipe::create_desc(const Scene& scene) {
 
+    const int n_objects = scene.size() ? scene.size() : 1;
+
     VkDescriptorSetLayoutBinding ubo_bind = {};
     ubo_bind.binding = 0;
     ubo_bind.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -545,38 +582,45 @@ void RTPipe::create_desc(const Scene& scene) {
     ubo_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
     ubo_bind.pImmutableSamplers = nullptr;
 
+    VkDescriptorSetLayoutBinding d_bind = {};
+    d_bind.binding = 1;
+    d_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    d_bind.descriptorCount = 1;
+    d_bind.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+    d_bind.pImmutableSamplers = nullptr;
+
     VkDescriptorSetLayoutBinding v_bind = {};
-    v_bind.binding = 1;
+    v_bind.binding = 2;
     v_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    v_bind.descriptorCount = scene.size();
+    v_bind.descriptorCount = n_objects;
     v_bind.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
     v_bind.pImmutableSamplers = nullptr;
 
     VkDescriptorSetLayoutBinding i_bind = {};
-    i_bind.binding = 2;
+    i_bind.binding = 3;
     i_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    i_bind.descriptorCount = scene.size();
+    i_bind.descriptorCount = n_objects;
     i_bind.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
     i_bind.pImmutableSamplers = nullptr;
 
     VkDescriptorSetLayoutBinding a_bind = {};
-    a_bind.binding = 3;
+    a_bind.binding = 4;
     a_bind.descriptorCount = 1;
     a_bind.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
     a_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
 
     VkDescriptorSetLayoutBinding s_bind = {};
-    s_bind.binding = 4;
+    s_bind.binding = 5;
     s_bind.descriptorCount = 1;
     s_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     s_bind.pImmutableSamplers = nullptr;
     s_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
 
-    VkDescriptorSetLayoutBinding bindings[] = {ubo_bind, v_bind, i_bind, a_bind, s_bind};
+    VkDescriptorSetLayoutBinding bindings[] = {ubo_bind, d_bind, v_bind, i_bind, a_bind, s_bind};
 
     VkDescriptorSetLayoutCreateInfo layout_info = {};
     layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layout_info.bindingCount = 5;
+    layout_info.bindingCount = 6;
     layout_info.pBindings = bindings;
 
     VK_CHECK(vkCreateDescriptorSetLayout(vk().device(), &layout_info, nullptr, &pipe->d_layout));
@@ -630,20 +674,34 @@ void RTPipe::create_desc(const Scene& scene) {
         VkWriteDescriptorSet vbw = {};
         vbw.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         vbw.dstSet = pipe->descriptor_sets[i];
-        vbw.dstBinding = 1;
+        vbw.dstBinding = 2;
         vbw.dstArrayElement = 0;
         vbw.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        vbw.descriptorCount = vbufs.size();
-        vbw.pBufferInfo = vbufs.data();
+
+        VkDescriptorBufferInfo empty_info = {};
+        empty_info.buffer = VK_NULL_HANDLE;
+        empty_info.range = VK_WHOLE_SIZE;
+        if(vbufs.size()) {
+            vbw.descriptorCount = vbufs.size();
+            vbw.pBufferInfo = vbufs.data();
+        } else {
+            vbw.descriptorCount = 1;
+            vbw.pBufferInfo = &empty_info;
+        }
 
         VkWriteDescriptorSet ibw = {};
         ibw.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         ibw.dstSet = pipe->descriptor_sets[i];
-        ibw.dstBinding = 2;
+        ibw.dstBinding = 3;
         ibw.dstArrayElement = 0;
         ibw.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        ibw.descriptorCount = ibufs.size();
-        ibw.pBufferInfo = ibufs.data();
+        if(ibufs.size()) {
+            ibw.descriptorCount = ibufs.size();
+            ibw.pBufferInfo = ibufs.data();
+        } else {
+            ibw.descriptorCount = 1;
+            ibw.pBufferInfo = &empty_info;
+        }
 
         VkWriteDescriptorSet writes[] = {ubw, vbw, ibw};
         vkUpdateDescriptorSets(vk().device(), 3, writes, 0, nullptr);

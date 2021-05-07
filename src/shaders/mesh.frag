@@ -8,5 +8,5 @@ layout(location = 2) in vec2 fragTexcoord;
 layout(location = 0) out vec4 outColor;
 
 void main() {
-    outColor = vec4(fragPos, 1.0f);
+    outColor = vec4(abs(normalize(fragNorm)), 1.0f);
 }

@@ -51,7 +51,7 @@ void BVHPipe::create_pipe() {
     {
         threaded_pipe->destroy_swap();
 
-        Shader threaded(File::read("shaders/bvh_threaded.comp.spv").value());
+        Shader threaded(File::read("shaders/bvh/bvh_threaded.comp.spv").value());
         VkPipelineShaderStageCreateInfo stage_info = {};
         stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         stage_info.stage = VK_SHADER_STAGE_COMPUTE_BIT;
@@ -98,7 +98,7 @@ void BVHPipe::create_pipe() {
         spec.mapEntryCount = 1;
         spec.pMapEntries = spec_map;
 
-        Shader wide(File::read("shaders/bvh_wide" + std::to_string(w+1) + ".comp.spv").value());
+        Shader wide(File::read("shaders/bvh/bvh_wide" + std::to_string(w+1) + ".comp.spv").value());
         VkPipelineShaderStageCreateInfo stage_info = {};
         stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         stage_info.stage = VK_SHADER_STAGE_COMPUTE_BIT;
@@ -133,7 +133,7 @@ void BVHPipe::create_pipe() {
     {
         stack_pipe->destroy_swap();
 
-        Shader stack(File::read("shaders/bvh_stack.comp.spv").value());
+        Shader stack(File::read("shaders/bvh/bvh_stack.comp.spv").value());
         VkPipelineShaderStageCreateInfo stage_info = {};
         stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         stage_info.stage = VK_SHADER_STAGE_COMPUTE_BIT;
@@ -167,7 +167,7 @@ void BVHPipe::create_pipe() {
     {
         obb_pipe->destroy_swap();
 
-        Shader obb(File::read("shaders/bvh_obb.comp.spv").value());
+        Shader obb(File::read("shaders/bvh/bvh_obb.comp.spv").value());
         VkPipelineShaderStageCreateInfo stage_info = {};
         stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         stage_info.stage = VK_SHADER_STAGE_COMPUTE_BIT;
@@ -201,7 +201,7 @@ void BVHPipe::create_pipe() {
     {
         brute_pipe->destroy_swap();
 
-        Shader brute(File::read("shaders/bvh_brute.comp.spv").value());
+        Shader brute(File::read("shaders/bvh/bvh_brute.comp.spv").value());
         VkPipelineShaderStageCreateInfo stage_info = {};
         stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         stage_info.stage = VK_SHADER_STAGE_COMPUTE_BIT;

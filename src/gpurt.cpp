@@ -8,7 +8,6 @@
 #include <util/image.h>
 
 constexpr int QUERY_MAX = 1000000;
-// constexpr int QUERY_MAX = 100;
 
 static std::string bvh_name(VK::BVH_Type type, int w) {
     switch(type) {
@@ -97,6 +96,19 @@ GPURT::GPURT(Window& window, std::string scene_file) : window(window), cam(windo
 
     scene.load(Scene::Load_Opts(), scene_file, cam);
 
+    build_images();
+    build_pass();
+    build_pipe();
+    build_rt();
+    build_accel();
+
+    VK::vk().on_resize([this]() {
+        build_images();
+        build_pass();
+        build_pipe();
+    });
+
+#if 0
     std::ifstream fin_queries("queries.txt");
     while(fin_queries.good()) {
         Vec4 q;
@@ -136,29 +148,18 @@ GPURT::GPURT(Window& window, std::string scene_file) : window(window), cam(windo
 
     assert(f_rqueries.size() == f_rreference.size());
 
-    build_images();
-    build_pass();
-    build_pipe();
-    build_rt();
-    build_accel();
-
-    VK::vk().on_resize([this]() {
-        build_images();
-        build_pass();
-        build_pipe();
-    });
-
     const VK::Mesh& obj = scene.get(1).mesh();
     bvh_pipe.build(obj, 16);
 
     if(scene_file == "bunny.obj") {
         std::cout << "Testing file: " << scene_file << std::endl;
-        // run_tests();
+        run_tests();
     }
     std::cout << "Benchmarking random coherent: " << std::endl;
     benchmark_rng();
     std::cout << "Benchmarking primary rays: " << std::endl;
-    // benchmark_primary();
+    benchmark_primary();
+#endif
 }
 
 GPURT::~GPURT() {
@@ -359,7 +360,7 @@ void GPURT::render() {
         rt_pipe.use_image(f.rt_target_view);
         rt_pipe.use_accel(TLAS);
         rt_pipe.update_uniforms(cam);
-        rt_pipe.trace(cmds, {f.color->w, f.color->h});
+        rt_pipe.trace(cam, cmds, {f.color->w, f.color->h});
 
         VkImageBlit region = {};
         region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -511,6 +512,8 @@ void GPURT::build_accel() {
         TLAS.drop();
         TLAS->recreate(BLAS, BLAS_T);
         rebuild_tlas = false;
+
+        rt_pipe.recreate(scene);
     }
 }
 

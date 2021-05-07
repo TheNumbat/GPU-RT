@@ -83,10 +83,14 @@ static VK::Mesh mesh_from(const aiMesh* mesh) {
     for(unsigned int j = 0; j < mesh->mNumVertices; j++) {
         const aiVector3D& vpos = mesh->mVertices[j];
         aiVector3D vnorm;
+        aiVector3D vtex;
         if(mesh->HasNormals()) {
             vnorm = mesh->mNormals[j];
         }
-        mesh_verts.push_back({aiVec(vpos), aiVec(vnorm)});
+        if(mesh->HasTextureCoords(0)) {
+            vtex = mesh->mTextureCoords[0][j];
+        }
+        mesh_verts.push_back({Vec4{aiVec(vpos), vtex.x}, Vec4{aiVec(vnorm), vtex.y}});
     }
 
     for(unsigned int j = 0; j < mesh->mNumFaces; j++) {

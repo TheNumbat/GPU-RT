@@ -18,12 +18,10 @@ struct Cam_Uniforms {
 struct Mesh {
     typedef unsigned int Index;
     struct Vertex {
-        Vec3 pos;
-        Vec3 norm;
-        Vec2 tex_coord;
-
+        Vec4 pos;
+        Vec4 norm;
         static VkVertexInputBindingDescription bind_desc();
-        static std::array<VkVertexInputAttributeDescription, 3> attr_descs();
+        static std::array<VkVertexInputAttributeDescription, 2> attr_descs();
     };
 
     Mesh() = default;
@@ -112,18 +110,25 @@ struct RTPipe {
     void use_accel(const Accel& tlas);
     void use_image(const ImageView& out);
 
-    void trace(VkCommandBuffer& cmds, VkExtent2D ext);
+    void trace(const Camera& cam, VkCommandBuffer& cmds, VkExtent2D ext);
 
     Drop<PipeData> pipe;
 
 private:
+    struct alignas(16) Scene_Desc {
+        Mat4 model, modelIT;
+        unsigned int index;
+    };
+
     std::vector<Drop<Buffer>> camera_uniforms;
     Drop<Buffer> sbt;
+    Drop<Buffer> desc_buf;
     RTPipe_Constants consts;
 
     void create_sbt();
     void create_pipe();
     void create_desc(const Scene& scene);
+    void build_desc(const Scene& scene);
 };
 
 } // namespace VK

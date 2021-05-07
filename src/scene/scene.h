@@ -15,11 +15,11 @@ public:
 
     struct Load_Opts {
         bool new_scene = false;
-        bool drop_normals = true;
+        bool drop_normals = false;
         bool join_verts = true;
         bool triangulate = false;
         bool gen_normals = false;
-        bool gen_smooth_normals = false;
+        bool gen_smooth_normals = true;
         bool fix_infacing_normals = false;
         bool debone = false;
     };

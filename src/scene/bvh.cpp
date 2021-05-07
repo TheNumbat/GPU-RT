@@ -34,7 +34,7 @@ void BVH::build(const VK::Mesh& mesh, size_t max_leaf_size) {
     const auto& inds = mesh.inds();
 
     for(size_t i = 0; i < inds.size(); i += 3) {
-        triangles.push_back({verts[inds[i]].pos, verts[inds[i + 1]].pos, verts[inds[i + 2]].pos});
+        triangles.push_back({verts[inds[i]].pos.xyz(), verts[inds[i + 1]].pos.xyz(), verts[inds[i + 2]].pos.xyz()});
     }
 
     std::stack<BVHBuildData> bstack;
@@ -233,7 +233,7 @@ void OBBBVH::build(const VK::Mesh& mesh, size_t max_leaf_size) {
     const auto& inds = mesh.inds();
 
     for(size_t i = 0; i < inds.size(); i += 3) {
-        triangles.push_back({verts[inds[i]].pos, verts[inds[i + 1]].pos, verts[inds[i + 2]].pos});
+        triangles.push_back({verts[inds[i]].pos.xyz(), verts[inds[i + 1]].pos.xyz(), verts[inds[i + 2]].pos.xyz()});
     }
 
     std::stack<BVHBuildData> bstack;

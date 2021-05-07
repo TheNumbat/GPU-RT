@@ -77,7 +77,7 @@ endif()
 set_target_properties(fcpw-gpu PROPERTIES CXX_STANDARD 20 CXX_EXTENSIONS OFF)
 
 if(MSVC)
-    target_compile_options(fcpw-gpu PRIVATE /MP /W4 /WX /wd4201 /wd4840 /wd4100 /wd4267 /fp:fast)
+    target_compile_options(fcpw-gpu PRIVATE /MP /W4 /WX /wd4201 /wd4324 /wd4840 /wd4100 /wd4267 /fp:fast)
 else()
     target_compile_options(fcpw-gpu PRIVATE -Wall -fconcepts -Wextra -Werror -Wno-missing-braces -Wno-reorder -ffast-math -Wno-unused-parameter)
 endif()
@@ -120,23 +120,23 @@ add_shader(fcpw-gpu "out.frag")
 add_shader(fcpw-gpu "mesh.vert")
 add_shader(fcpw-gpu "mesh.frag")
 
-add_shader(fcpw-gpu "rt.rchit")
-add_shader(fcpw-gpu "rt.rmiss")
-add_shader(fcpw-gpu "rt.rgen")
+add_shader(fcpw-gpu "rt/rt.rchit")
+add_shader(fcpw-gpu "rt/rt.rmiss")
+add_shader(fcpw-gpu "rt/rt.rgen")
 
 add_shader(fcpw-gpu "rquery.rchit")
 add_shader(fcpw-gpu "rquery.rmiss")
 add_shader(fcpw-gpu "rquery.rgen")
 
-add_shader(fcpw-gpu "bvh_threaded.comp")
-add_shader(fcpw-gpu "bvh_brute.comp")
-add_shader(fcpw-gpu "bvh_stack.comp")
-add_shader(fcpw-gpu "bvh_obb.comp")
+add_shader(fcpw-gpu "bvh/bvh_threaded.comp")
+add_shader(fcpw-gpu "bvh/bvh_brute.comp")
+add_shader(fcpw-gpu "bvh/bvh_stack.comp")
+add_shader(fcpw-gpu "bvh/bvh_obb.comp")
 
-add_shader(fcpw-gpu "bvh_wide1.comp")
-add_shader(fcpw-gpu "bvh_wide2.comp")
-add_shader(fcpw-gpu "bvh_wide3.comp")
-add_shader(fcpw-gpu "bvh_wide4.comp")
+add_shader(fcpw-gpu "bvh/bvh_wide1.comp")
+add_shader(fcpw-gpu "bvh/bvh_wide2.comp")
+add_shader(fcpw-gpu "bvh/bvh_wide3.comp")
+add_shader(fcpw-gpu "bvh/bvh_wide4.comp")
 
 # define include paths
 

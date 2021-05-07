@@ -1885,11 +1885,18 @@ void Manager::create_logical_device_and_queues() {
     vk12_features.pNext = &ac_features;
     vk12_features.hostQueryReset = VK_TRUE;
     vk12_features.bufferDeviceAddress = VK_TRUE;
+    vk12_features.runtimeDescriptorArray = VK_TRUE;
+    vk12_features.shaderStorageBufferArrayNonUniformIndexing = VK_TRUE;
+
+    VkPhysicalDeviceRobustness2FeaturesEXT robust = {};
+    robust.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT;
+    robust.pNext = &vk12_features;
+    robust.nullDescriptor = VK_TRUE;
 
     VkPhysicalDeviceFeatures2 features2 = {};
     features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     features2.features.samplerAnisotropy = VK_TRUE;
-    features2.pNext = &vk12_features;
+    features2.pNext = &robust;
 
     VkDeviceCreateInfo dev_info = {};
     dev_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;

@@ -4,15 +4,9 @@ CLEANUP
     use transfer queue 
     abstract pipeline & render graph creation 
 
-SETUP
-    render textured objects
-
 FCPW 
-    wide bvh 
-    OBB / RSS bvh
     RTX queries for CPQs???
 
 Rendering 
-    set up RTX BVH and render them with ray tracing lel 
     add light sampling, indirect lighting 
     work on ReSTIR

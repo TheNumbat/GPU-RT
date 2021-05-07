@@ -26,5 +26,5 @@ layout(push_constant) uniform Constants
     vec3 lightPosition;
     float lightIntensity;
     int lightType;
-};
+} consts;
 

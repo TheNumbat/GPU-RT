@@ -5,6 +5,8 @@
 #include "rtcommon.glsl"
 
 layout(location = 0) rayPayloadInEXT vec3 payload;
+layout(location = 1) rayPayloadEXT bool shadowed;
+
 hitAttributeEXT vec3 attribs;
 
 layout(binding = 1, scalar) readonly buffer SceneDescs {
@@ -20,6 +22,8 @@ layout(binding = 3) readonly buffer Indices {
 } indices[];
 
 layout(binding = 4) uniform sampler2D Textures[];
+
+layout(binding = 5) uniform accelerationStructureEXT topLevelAS;
 
 void main() {
 
@@ -42,21 +46,38 @@ void main() {
 	worldPos = vec3(objects[gl_InstanceCustomIndexEXT].model * vec4(worldPos, 1.0));
 
 
-
-	vec3  L;
-	float lightIntensity = lightIntensity;
+	vec3 L;
+	float lightIntensity = consts.lightIntensity;
 	float lightDistance  = 100000.0;
-	if(lightType == 0) {
-		vec3 lDir      = lightPosition - worldPos;
+	if(consts.lightType == 0) {
+		vec3 lDir      = consts.lightPosition - worldPos;
 		lightDistance  = length(lDir);
-		lightIntensity = lightIntensity / (lightDistance * lightDistance);
+		lightIntensity = consts.lightIntensity / (lightDistance * lightDistance);
 		L              = normalize(lDir);
 	} else {
-		L = normalize(lightPosition - vec3(0));
+		L = normalize(consts.lightPosition - vec3(0));
 	}
-
-	float dotNL = max(dot(normal, L), 0.2);
-
+	float dotNL = dot(normal, L);
+	shadowed = true;
+	if(dotNL > 0) {
+		float tMin   = 0.001;
+		float tMax   = lightDistance;
+		vec3  origin = worldPos;
+		vec3  rayDir = L;
+		uint  flags = gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT | gl_RayFlagsSkipClosestHitShaderEXT;
+		traceRayEXT(topLevelAS,  // acceleration structure
+				flags,       // rayFlags
+				0xFF,        // cullMask
+				0,           // sbtRecordOffset
+				0,           // sbtRecordStride
+				1,           // missIndex
+				origin,      // ray origin
+				tMin,        // ray min range
+				rayDir,      // ray direction
+				tMax,        // ray max range
+				1            // payload (location = 1)
+		);
+	}
 
 
 	int texIdx = objects[gl_InstanceCustomIndexEXT].albedo_tex;
@@ -68,5 +89,9 @@ void main() {
 		vec2 texCoord = tc0 * barycentrics.x + tc1 * barycentrics.y + tc2 * barycentrics.z;
 		albedo = texture(Textures[texIdx], texCoord).xyz;
 	}
-	payload = dotNL * albedo;
+
+	if(shadowed) 
+		payload = 0.05 * albedo;
+	else
+		payload = dotNL * albedo;
 }

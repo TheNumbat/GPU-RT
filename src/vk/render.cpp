@@ -506,6 +506,7 @@ void RTPipe::build_textures(const Scene& scene) {
 
     const auto& images = scene.images();
     textures.clear();
+    texture_views.clear();
 
     for(const auto& image : images) {
         auto [w,h] = image.dim();

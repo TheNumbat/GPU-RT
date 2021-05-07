@@ -19,6 +19,8 @@ layout(binding = 3) readonly buffer Indices {
 	uint i[];
 } indices[];
 
+layout(binding = 4) uniform sampler2D Textures[];
+
 void main() {
 
 	uint objId = objects[gl_InstanceCustomIndexEXT].index;
@@ -39,6 +41,8 @@ void main() {
 	vec3 worldPos = v0.pos_tx.xyz * barycentrics.x + v1.pos_tx.xyz * barycentrics.y + v2.pos_tx.xyz * barycentrics.z;
 	worldPos = vec3(objects[gl_InstanceCustomIndexEXT].model * vec4(worldPos, 1.0));
 
+
+
 	vec3  L;
 	float lightIntensity = lightIntensity;
 	float lightDistance  = 100000.0;
@@ -52,5 +56,17 @@ void main() {
 	}
 
 	float dotNL = max(dot(normal, L), 0.2);
-	payload = vec3(dotNL);
+
+
+
+	int texIdx = objects[gl_InstanceCustomIndexEXT].albedo_tex;
+	vec3 albedo = objects[gl_InstanceCustomIndexEXT].albedo.xyz;
+	if(texIdx >= 0) {
+		vec2 tc0 = vec2(v0.pos_tx.w, v0.norm_ty.w);
+		vec2 tc1 = vec2(v1.pos_tx.w, v1.norm_ty.w);
+		vec2 tc2 = vec2(v2.pos_tx.w, v2.norm_ty.w);
+		vec2 texCoord = tc0 * barycentrics.x + tc1 * barycentrics.y + tc2 * barycentrics.z;
+		albedo = texture(Textures[texIdx], texCoord).xyz;
+	}
+	payload = dotNL * albedo;
 }

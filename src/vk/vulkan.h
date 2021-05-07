@@ -108,7 +108,7 @@ struct Image {
     void transition(VkCommandBuffer& cmds, VkImageLayout new_l);
     void transition(VkCommandBuffer& cmds, VkImageLayout old_l, VkImageLayout new_l);
 
-    void write(Util::Image& img);
+    void write(const Util::Image& img);
 
     VkImage img = VK_NULL_HANDLE;
     unsigned int w = 0;

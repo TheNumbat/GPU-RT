@@ -246,6 +246,11 @@ void Image::destroy() {
     std::memset(this, 0, sizeof(Image));
 }
 
+Image::Image(unsigned int width, unsigned int height, VkFormat format, VkImageTiling tiling,
+          VkImageUsageFlags img_usage, VmaMemoryUsage mem_usage) {
+    recreate(width, height, format, tiling, img_usage, mem_usage);
+}
+
 void Image::recreate(unsigned int width, unsigned int height, VkFormat fmt, VkImageTiling tlg,
                      VkImageUsageFlags iusage, VmaMemoryUsage musage) {
     destroy();
@@ -279,7 +284,7 @@ void Image::recreate(unsigned int width, unsigned int height, VkFormat fmt, VkIm
     VK_CHECK(vmaCreateImage(vk().gpu_alloc, &img_info, &alloc_info, &img, &mem, nullptr));
 }
 
-void Image::write(Util::Image& data) {
+void Image::write(const Util::Image& data) {
 
     VkCommandBuffer cmds = vk().begin_one_time();
 
@@ -1887,6 +1892,7 @@ void Manager::create_logical_device_and_queues() {
     vk12_features.bufferDeviceAddress = VK_TRUE;
     vk12_features.runtimeDescriptorArray = VK_TRUE;
     vk12_features.shaderStorageBufferArrayNonUniformIndexing = VK_TRUE;
+    vk12_features.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
 
     VkPhysicalDeviceRobustness2FeaturesEXT robust = {};
     robust.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT;

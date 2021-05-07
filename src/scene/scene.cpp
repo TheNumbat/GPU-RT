@@ -1,268 +1,327 @@
 
-#include <assimp/Exporter.hpp>
-#include <assimp/Importer.hpp>
-#include <assimp/postprocess.h>
-#include <assimp/scene.h>
 #include <sstream>
-
 #include "scene.h"
+
+#define TINYGLTF_NOEXCEPTION
+#include <sf_libs/tiny_gltf.h>
 
 Scene::Scene(unsigned int start) : next_id(start), first_id(start) {
 }
 
 unsigned int Scene::used_ids() {
-    return next_id;
+	return next_id;
 }
 
 unsigned int Scene::reserve_id() {
-    return next_id++;
+	return next_id++;
 }
 
 unsigned int Scene::add(Object&& obj) {
-    assert(objs.find(obj.id()) == objs.end());
-    objs.emplace(std::make_pair(obj.id(), std::move(obj)));
-    return obj.id();
+	assert(objs.find(obj.id()) == objs.end());
+	objs.emplace(std::make_pair(obj.id(), std::move(obj)));
+	return obj.id();
 }
 
 void Scene::erase(unsigned int id) {
-    objs.erase(id);
+	objs.erase(id);
 }
 
 size_t Scene::size() const {
-    return objs.size();
+	return objs.size();
 }
 
 void Scene::clear() {
-    objs.clear();
+	objs.clear();
+	textures.clear();
 }
 
 bool Scene::empty() {
-    return objs.size() == 0;
+	return objs.size() == 0;
 }
 
 Object& Scene::get(unsigned int id) {
-    auto entry = objs.find(id);
-    assert(entry != objs.end());
-    return entry->second;
+	auto entry = objs.find(id);
+	assert(entry != objs.end());
+	return entry->second;
 }
 
-//////////////////////////////////////////////////////////////
-// Scene importer/exporter
-//////////////////////////////////////////////////////////////
+std::string Scene::load(std::string file, Camera& cam) {
 
-static const std::string FAKE_NAME = "FAKE-S3D-FAKE-MESH";
-static const std::string RENDER_CAM_NODE = "S3D-RENDER_CAM_NODE";
+	clear();
 
-static Vec3 aiVec(aiVector3D aiv) {
-    return Vec3(aiv.x, aiv.y, aiv.z);
+	using namespace tinygltf;
+
+	Model model;
+	TinyGLTF loader;
+	std::string err;
+	std::string warn;
+	bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, file);
+
+	if (!warn.empty()) {
+		warn("%s\n", warn.c_str());
+	}
+
+	if (!err.empty()) {
+		warn("Err: %s\n", err.c_str());
+	}
+
+	if (!ret) {
+		warn("Failed to parse glTF\n");
+	}
+
+	for (const auto &gltfMesh : model.meshes) {
+
+		// Create a mesh object
+		for (const auto &meshPrimitive : gltfMesh.primitives) {
+		
+		std::vector<Vec3> positions, normals;
+		std::vector<Vec2> texcoords;
+		std::vector<VK::Mesh::Index> indices;
+
+		// Boolean used to check if we have converted the vertex buffer format
+		bool convertedToTriangleList = false;
+		{
+			const auto &indicesAccessor = model.accessors[meshPrimitive.indices];
+			const auto &bufferView = model.bufferViews[indicesAccessor.bufferView];
+			const auto &buffer = model.buffers[bufferView.buffer];
+			const auto dataAddress = buffer.data.data() + bufferView.byteOffset +
+									indicesAccessor.byteOffset;
+			const auto byteStride = indicesAccessor.ByteStride(bufferView);
+			const auto count = indicesAccessor.count;
+
+			// Allocate the index array in the pointer-to-base declared in the
+			// parent scope
+			switch (indicesAccessor.componentType) {
+			case TINYGLTF_COMPONENT_TYPE_BYTE:
+				for(size_t i = 0; i < count; i++) {
+					indices.push_back(*(char*)(dataAddress + byteStride * i));
+				}
+				break;
+			case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
+				for(size_t i = 0; i < count; i++) {
+					indices.push_back(*(unsigned char*)(dataAddress + byteStride * i));
+				}
+				break;
+
+			case TINYGLTF_COMPONENT_TYPE_SHORT:
+				for(size_t i = 0; i < count; i++) {
+					indices.push_back(*(short*)(dataAddress + byteStride * i));
+				}
+				break;
+
+			case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT:
+				for(size_t i = 0; i < count; i++) {
+					indices.push_back(*(unsigned short*)(dataAddress + byteStride * i));
+				}
+				break;
+
+			case TINYGLTF_COMPONENT_TYPE_INT:
+				for(size_t i = 0; i < count; i++) {
+					indices.push_back(*(int*)(dataAddress + byteStride * i));
+				}
+				break;
+
+			case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT:
+				for(size_t i = 0; i < count; i++) {
+					indices.push_back(*(unsigned int*)(dataAddress + byteStride * i));
+				}
+				break;
+			default:
+				break;
+			}
+		}
+
+		switch (meshPrimitive.mode) {
+			// We re-arrange the indices so that it describe a simple list of
+			// triangles
+			case TINYGLTF_MODE_TRIANGLE_FAN:
+			if (!convertedToTriangleList) {
+				// This only has to be done once per primitive
+				convertedToTriangleList = true;
+
+				// We steal the guts of the vector
+				auto triangleFan = std::move(indices);
+				indices.clear();
+
+				// Push back the indices that describe just one triangle one by one
+				for (size_t i{2}; i < triangleFan.size(); ++i) {
+					indices.push_back(triangleFan[0]);
+					indices.push_back(triangleFan[i - 1]);
+					indices.push_back(triangleFan[i]);
+				}
+			}
+			case TINYGLTF_MODE_TRIANGLE_STRIP:
+			if (!convertedToTriangleList) {
+				// This only has to be done once per primitive
+				convertedToTriangleList = true;
+
+				auto triangleStrip = std::move(indices);
+				indices.clear();
+
+				for (size_t i{2}; i < triangleStrip.size(); ++i) {
+				indices.push_back(triangleStrip[i - 2]);
+				indices.push_back(triangleStrip[i - 1]);
+				indices.push_back(triangleStrip[i]);
+				}
+			}
+			case TINYGLTF_MODE_TRIANGLES:  // this is the simpliest case to handle
+			{
+
+			for (const auto &attribute : meshPrimitive.attributes) {
+				const auto attribAccessor = model.accessors[attribute.second];
+				const auto &bufferView =
+					model.bufferViews[attribAccessor.bufferView];
+				const auto &buffer = model.buffers[bufferView.buffer];
+				const auto dataPtr = buffer.data.data() + bufferView.byteOffset +
+									attribAccessor.byteOffset;
+				const auto byte_stride = attribAccessor.ByteStride(bufferView);
+				const auto count = attribAccessor.count;
+
+				if (attribute.first == "POSITION") {
+					switch (attribAccessor.type) {
+						case TINYGLTF_TYPE_VEC3: {
+						switch (attribAccessor.componentType) {
+							case TINYGLTF_COMPONENT_TYPE_FLOAT:
+							for (size_t i = 0; i < count; i++) {
+								Vec3* v = (Vec3*)(dataPtr + i * byte_stride);
+								positions.push_back(*v);
+							}
+						}
+						break;
+						case TINYGLTF_COMPONENT_TYPE_DOUBLE: {
+							switch (attribAccessor.type) {
+							case TINYGLTF_TYPE_VEC3: {
+								for (size_t i = 0; i < count; i++) {
+									double* values = (double*)(dataPtr + i * byte_stride);
+									Vec3 p{(float)values[0], (float)values[1], (float)values[2]};
+									positions.push_back(p);
+								}
+							} break;
+							default:
+								break;
+							}
+							break;
+							default:
+							break;
+						}
+						} break;
+					}
+				}
+
+				if (attribute.first == "NORMAL") {
+					switch (attribAccessor.type) {
+						case TINYGLTF_TYPE_VEC3: {
+						switch (attribAccessor.componentType) {
+							case TINYGLTF_COMPONENT_TYPE_FLOAT: {
+							for(size_t i = 0; i < count; i++) {
+								Vec3* n = (Vec3*)(dataPtr + i * byte_stride);
+								normals.push_back(*n);
+							}
+							} break;
+							case TINYGLTF_COMPONENT_TYPE_DOUBLE: {
+							for(size_t i = 0; i < count; i++) {
+								double* values = (double*)(dataPtr + i * byte_stride);
+								Vec3 n{(float)values[0], (float)values[1], (float)values[2]};
+								normals.push_back(n);
+							}
+							} break;
+							default:
+							std::cerr << "Unhandeled componant type for normal\n";
+						}
+						} break;
+						default:
+						std::cerr << "Unhandeled vector type for normal\n";
+					}
+				}
+
+				// Face varying comment on the normals is also true for the UVs
+				if (attribute.first == "TEXCOORD_0") {
+					switch (attribAccessor.type) {
+					case TINYGLTF_TYPE_VEC2: {
+						switch (attribAccessor.componentType) {
+						case TINYGLTF_COMPONENT_TYPE_FLOAT: {
+							for(size_t i = 0; i < count; i++) {
+								Vec2* n = (Vec2*)(dataPtr + i * byte_stride);
+								texcoords.push_back(*n);
+							}
+						} break;
+						case TINYGLTF_COMPONENT_TYPE_DOUBLE: {
+							for(size_t i = 0; i < count; i++) {
+								double* values = (double*)(dataPtr + i * byte_stride);
+								Vec2 tc{(float)values[0], (float)values[1]};
+								texcoords.push_back(tc);
+							}
+						} break;
+						default:
+							std::cerr << "unrecognized vector type for UV";
+						}
+					} break;
+					default:
+						std::cerr << "unreconized componant type for UV";
+					}
+				}
+			}
+			break;
+
+			default:
+				std::cerr << "primitive mode not implemented";
+				break;
+
+			// These aren't triangles:
+			case TINYGLTF_MODE_POINTS:
+			case TINYGLTF_MODE_LINE:
+			case TINYGLTF_MODE_LINE_LOOP:
+				std::cerr << "primitive is not triangle based, ignoring";
+			}
+		}
+
+		::Material mat;
+
+		const tinygltf::Material& glmat = model.materials[meshPrimitive.material];
+
+		const auto& basecolorfactor = glmat.pbrMetallicRoughness.baseColorFactor;
+		const auto emissivefactor = glmat.emissiveFactor;
+
+		mat.albedo = Vec3{(float)basecolorfactor[0], (float)basecolorfactor[1], (float)basecolorfactor[2]};
+		mat.albedo_tex = glmat.pbrMetallicRoughness.baseColorTexture.index;
+
+		mat.emissive = Vec3{(float)emissivefactor[0], (float)emissivefactor[1], (float)emissivefactor[2]};
+		mat.emissive_tex = glmat.emissiveTexture.index;
+
+		mat.metal_rough = Vec2{(float)glmat.pbrMetallicRoughness.metallicFactor, (float)glmat.pbrMetallicRoughness.roughnessFactor};
+		mat.metal_rough_tex = glmat.pbrMetallicRoughness.metallicRoughnessTexture.index;
+
+		std::vector<VK::Mesh::Vertex> verts;
+		for(size_t i = 0; i < positions.size(); i++) {
+			Vec3 p = positions[i];
+			Vec3 n = i < normals.size() ? normals[i] : Vec3{};
+			Vec2 tc = i < texcoords.size() ? texcoords[i] : Vec2{};
+			verts.push_back({Vec4{p, tc.x}, Vec4{n, tc.y}});
+		}
+
+		add(Object(reserve_id(), {}, VK::Mesh(std::move(verts), std::move(indices)), mat));
+		}
+	}
+
+	// Iterate through all texture declaration in glTF file
+	for (const auto &gltfTexture : model.textures) {
+		Util::Image tex;
+		const auto &image = model.images[gltfTexture.source];
+		assert(image.component == 4);
+
+		const auto size =
+			image.component * image.width * image.height * sizeof(unsigned char);
+		std::vector<unsigned char> data(size);
+		std::memcpy(data.data(), image.image.data(), size);
+
+		tex.reload(image.width, image.height, std::move(data));
+		textures.push_back(std::move(tex));
+	}
+
+	return err;
 }
 
-static Spectrum aiSpec(aiColor3D aiv) {
-    return Spectrum(aiv.r, aiv.g, aiv.b);
+unsigned int Scene::n_textures() const {
+	return (unsigned int)textures.size();
 }
 
-static Mat4 aiMat(aiMatrix4x4 T) {
-    return Mat4{Vec4{T[0][0], T[1][0], T[2][0], T[3][0]}, Vec4{T[0][1], T[1][1], T[2][1], T[3][1]},
-                Vec4{T[0][2], T[1][2], T[2][2], T[3][2]}, Vec4{T[0][3], T[1][3], T[2][3], T[3][3]}};
-}
-
-static aiMatrix4x4 node_transform(const aiNode* node) {
-    aiMatrix4x4 T;
-    while(node) {
-        T = T * node->mTransformation;
-        node = node->mParent;
-    }
-    return T;
-}
-
-static VK::Mesh mesh_from(const aiMesh* mesh) {
-
-    std::vector<VK::Mesh::Vertex> mesh_verts;
-    std::vector<VK::Mesh::Index> mesh_inds;
-
-    for(unsigned int j = 0; j < mesh->mNumVertices; j++) {
-        const aiVector3D& vpos = mesh->mVertices[j];
-        aiVector3D vnorm;
-        aiVector3D vtex;
-        if(mesh->HasNormals()) {
-            vnorm = mesh->mNormals[j];
-        }
-        if(mesh->HasTextureCoords(0)) {
-            vtex = mesh->mTextureCoords[0][j];
-        }
-        mesh_verts.push_back({Vec4{aiVec(vpos), vtex.x}, Vec4{aiVec(vnorm), vtex.y}});
-    }
-
-    for(unsigned int j = 0; j < mesh->mNumFaces; j++) {
-        const aiFace& face = mesh->mFaces[j];
-        if(face.mNumIndices < 3) continue;
-        unsigned int start = face.mIndices[0];
-        for(size_t k = 1; k <= face.mNumIndices - 2; k++) {
-            mesh_inds.push_back(start);
-            mesh_inds.push_back(face.mIndices[k]);
-            mesh_inds.push_back(face.mIndices[k + 1]);
-        }
-    }
-
-    return VK::Mesh(std::move(mesh_verts), std::move(mesh_inds));
-}
-
-static Material load_material(aiMaterial* ai_mat) {
-
-    Material mat;
-
-    aiColor3D albedo;
-    ai_mat->Get(AI_MATKEY_COLOR_DIFFUSE, albedo);
-    mat.albedo = aiSpec(albedo);
-
-    aiColor3D emissive;
-    ai_mat->Get(AI_MATKEY_COLOR_EMISSIVE, emissive);
-    mat.emissive = aiSpec(emissive);
-
-    aiColor3D reflectance;
-    ai_mat->Get(AI_MATKEY_COLOR_REFLECTIVE, reflectance);
-    mat.reflectance = aiSpec(reflectance);
-
-    aiColor3D transmittance;
-    ai_mat->Get(AI_MATKEY_COLOR_TRANSPARENT, transmittance);
-    mat.transmittance = aiSpec(transmittance);
-
-    ai_mat->Get(AI_MATKEY_REFRACTI, mat.ior);
-    ai_mat->Get(AI_MATKEY_SHININESS, mat.intensity);
-
-    aiString ai_type;
-    ai_mat->Get(AI_MATKEY_NAME, ai_type);
-    std::string type(ai_type.C_Str());
-
-    if(type.find("lambertian") != std::string::npos) {
-        mat.type = Material_Type::lambertian;
-    } else if(type.find("mirror") != std::string::npos) {
-        mat.type = Material_Type::mirror;
-    } else if(type.find("refract") != std::string::npos) {
-        mat.type = Material_Type::refract;
-    } else if(type.find("glass") != std::string::npos) {
-        mat.type = Material_Type::glass;
-    } else if(type.find("diffuse_light") != std::string::npos) {
-        mat.type = Material_Type::diffuse_light;
-    } else {
-        mat = Material();
-    }
-    mat.emissive *= 1.0f / mat.intensity;
-
-    return mat;
-}
-
-static void load_node(Scene& scobj, std::vector<std::string>& errors,
-                      std::unordered_map<aiNode*, unsigned int>& node_to_obj, const aiScene* scene,
-                      aiNode* node, aiMatrix4x4 transform) {
-
-    transform = transform * node->mTransformation;
-
-    for(unsigned int i = 0; i < node->mNumMeshes; i++) {
-
-        const aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
-
-        aiVector3D ascale, arot, apos;
-        transform.Decompose(ascale, arot, apos);
-        Vec3 pos = aiVec(apos);
-        Vec3 rot = aiVec(arot);
-        Vec3 scale = aiVec(ascale);
-        Pose p = {pos, Degrees(rot).range(0.0f, 360.0f), scale};
-
-        Material mat_opt = load_material(scene->mMaterials[mesh->mMaterialIndex]);
-
-        VK::Mesh gmesh = mesh_from(mesh);
-
-        Object new_obj(scobj.reserve_id(), p, std::move(gmesh));
-
-        new_obj.material = mat_opt;
-
-        node_to_obj[node] = new_obj.id();
-        scobj.add(std::move(new_obj));
-    }
-
-    for(unsigned int i = 0; i < node->mNumChildren; i++) {
-        load_node(scobj, errors, node_to_obj, scene, node->mChildren[i], transform);
-    }
-}
-
-static unsigned int load_flags(Scene::Load_Opts opt) {
-
-    unsigned int flags = aiProcess_OptimizeMeshes | aiProcess_FindInvalidData |
-                         aiProcess_FindInstances | aiProcess_FindDegenerates;
-
-    if(opt.drop_normals) {
-        flags |= aiProcess_DropNormals;
-    }
-    if(opt.join_verts) {
-        flags |= aiProcess_JoinIdenticalVertices;
-    }
-    if(opt.triangulate) {
-        flags |= aiProcess_Triangulate;
-    }
-    if(opt.gen_smooth_normals) {
-        flags |= aiProcess_GenSmoothNormals;
-    } else if(opt.gen_normals) {
-        flags |= aiProcess_GenNormals;
-    }
-    if(opt.fix_infacing_normals) {
-        flags |= aiProcess_FixInfacingNormals;
-    }
-    if(opt.debone) {
-        flags |= aiProcess_Debone;
-    } else {
-        flags |= aiProcess_PopulateArmatureData;
-    }
-
-    return flags;
-}
-
-static const std::string ANIM_CAM_NAME = "S3D-ANIM_CAM";
-
-std::string Scene::load(Scene::Load_Opts loader, std::string file, Camera& cam) {
-
-    if(loader.new_scene) {
-        clear();
-    }
-
-    Assimp::Importer importer;
-    const aiScene* scene = importer.ReadFile(file.c_str(), load_flags(loader));
-
-    if(!scene) {
-        return "Parsing scene " + file + ": " + std::string(importer.GetErrorString());
-    }
-
-    std::vector<std::string> errors;
-    std::unordered_map<aiNode*, unsigned int> node_to_obj;
-    scene->mRootNode->mTransformation = aiMatrix4x4();
-
-    // Load objects
-    load_node(*this, errors, node_to_obj, scene, scene->mRootNode, aiMatrix4x4());
-
-    // Load cameras
-    if(loader.new_scene && scene->mNumCameras > 0) {
-
-        auto load = [&](unsigned int i) {
-            const aiCamera& aiCam = *scene->mCameras[i];
-            Mat4 cam_transform = aiMat(node_transform(scene->mRootNode->FindNode(aiCam.mName)));
-            Vec3 pos = cam_transform * aiVec(aiCam.mPosition);
-            Vec3 center = cam_transform * aiVec(aiCam.mLookAt);
-
-            std::string name(aiCam.mName.C_Str());
-            if(name.find(ANIM_CAM_NAME) == std::string::npos) {
-                cam.load(pos, center, aiCam.mAspect, aiCam.mHorizontalFOV, aiCam.mClipPlaneNear,
-                         aiCam.mClipPlaneFar);
-            }
-        };
-
-        for(unsigned int i = 0; i < scene->mNumCameras; i++) {
-            load(i);
-        }
-    }
-
-    std::stringstream stream;
-    for(size_t i = 0; i < errors.size(); i++) {
-        stream << "Loading mesh " << i << ": " << errors[i] << std::endl;
-    }
-    return stream.str();
-}

@@ -11,7 +11,7 @@ public:
     Object(const Object& src) = delete;
     Object(Object&& src) = default;
 
-    Object(unsigned int id, Pose p, VK::Mesh&& m);
+    Object(unsigned int id, Pose p, VK::Mesh&& m, Material mat);
 
     ~Object() = default;
 

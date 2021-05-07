@@ -6,8 +6,13 @@
 struct Scene_Obj {
 	mat4 model;
 	mat4 modelIT;
+	vec4 albedo;
+	vec4 emissive;
+	vec4 metal_rough;
+	int albedo_tex;
+	int emissive_tex;
+	int metal_rough_tex;
 	uint index;
-	uint pad[3];
 };
 
 struct Vertex {

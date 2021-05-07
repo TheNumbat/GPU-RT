@@ -12,8 +12,8 @@ layout(binding = 0) uniform UniformBufferObject {
     mat4 V, P, iV, iP;
 } cam;
 
-layout(binding = 4) uniform accelerationStructureEXT topLevelAS;
-layout(binding = 5, rgba32f) uniform image2D image;
+layout(binding = 5) uniform accelerationStructureEXT topLevelAS;
+layout(binding = 6, rgba32f) uniform image2D image;
 
 void main() {
 

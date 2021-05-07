@@ -336,10 +336,11 @@ RTPipe::RTPipe(const Scene& scene) {
 
 void RTPipe::recreate(const Scene& scene) {
     pipe.drop();
+    build_textures(scene);
     create_desc(scene);
+    build_desc(scene);
     create_pipe();
     create_sbt();
-    build_desc(scene);
 }
 
 void RTPipe::build_desc(const Scene& scene) {
@@ -350,6 +351,12 @@ void RTPipe::build_desc(const Scene& scene) {
         desc.index = descs.size();
         desc.model = obj.pose.transform();
         desc.modelIT = desc.model.inverse().T();
+        desc.albedo_tex = obj.material.albedo_tex;
+        desc.metal_rough_tex = obj.material.metal_rough_tex;
+        desc.emissive_tex = obj.material.emissive_tex;
+        desc.albedo = Vec4{obj.material.albedo, 0.0f};
+        desc.emissive = Vec4{obj.material.emissive, 0.0f};
+        desc.metal_rough = Vec4{obj.material.metal_rough.x, obj.material.metal_rough.y, 0.0f, 0.0f};
         descs.push_back(desc);
     });
 
@@ -407,7 +414,7 @@ void RTPipe::use_image(const ImageView& out) {
     VkWriteDescriptorSet img_write = {};
     img_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     img_write.dstSet = pipe->descriptor_sets[i];
-    img_write.dstBinding = 5;
+    img_write.dstBinding = 6;
     img_write.dstArrayElement = 0;
     img_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     img_write.descriptorCount = 1;
@@ -426,7 +433,7 @@ void RTPipe::use_accel(const Accel& tlas) {
     VkWriteDescriptorSet acw = {};
     acw.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     acw.dstSet = pipe->descriptor_sets[vk().frame()];
-    acw.dstBinding = 4;
+    acw.dstBinding = 5;
     acw.dstArrayElement = 0;
     acw.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
     acw.descriptorCount = 1;
@@ -493,6 +500,25 @@ void RTPipe::create_sbt() {
 
     staging.unmap();
     staging.copy_to(sbt);
+}
+
+void RTPipe::build_textures(const Scene& scene) {
+
+    const auto& images = scene.images();
+    textures.clear();
+
+    for(const auto& image : images) {
+        auto [w,h] = image.dim();
+        
+        VK::Image img(w, h, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+        img.write(image);
+
+        textures.push_back(std::move(img));
+        texture_views.push_back(VK::ImageView(textures.back(), VK_IMAGE_ASPECT_COLOR_BIT));
+    }
+
+    texture_sampler.drop();
+    texture_sampler->recreate(VK_FILTER_LINEAR, VK_FILTER_LINEAR);
 }
 
 void RTPipe::create_pipe() {
@@ -603,25 +629,32 @@ void RTPipe::create_desc(const Scene& scene) {
     i_bind.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
     i_bind.pImmutableSamplers = nullptr;
 
+    VkDescriptorSetLayoutBinding t_bind = {};
+    t_bind.binding = 4;
+    t_bind.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    t_bind.descriptorCount = textures.size();
+    t_bind.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+    t_bind.pImmutableSamplers = nullptr;
+
     VkDescriptorSetLayoutBinding a_bind = {};
-    a_bind.binding = 4;
+    a_bind.binding = 5;
     a_bind.descriptorCount = 1;
     a_bind.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
     a_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
 
-    VkDescriptorSetLayoutBinding s_bind = {};
-    s_bind.binding = 5;
-    s_bind.descriptorCount = 1;
-    s_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    s_bind.pImmutableSamplers = nullptr;
-    s_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+    VkDescriptorSetLayoutBinding store_bind = {};
+    store_bind.binding= 6;
+    store_bind.descriptorCount = 1;
+    store_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    store_bind.pImmutableSamplers = nullptr;
+    store_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
 
-    VkDescriptorSetLayoutBinding bindings[] = {ubo_bind, d_bind, v_bind, i_bind, a_bind, s_bind};
+    std::vector<VkDescriptorSetLayoutBinding> bindings = {ubo_bind, d_bind, v_bind, i_bind, t_bind, a_bind, store_bind};
 
     VkDescriptorSetLayoutCreateInfo layout_info = {};
     layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layout_info.bindingCount = 6;
-    layout_info.pBindings = bindings;
+    layout_info.bindingCount = bindings.size();
+    layout_info.pBindings = bindings.data();
 
     VK_CHECK(vkCreateDescriptorSetLayout(vk().device(), &layout_info, nullptr, &pipe->d_layout));
 
@@ -671,16 +704,16 @@ void RTPipe::create_desc(const Scene& scene) {
         ubw.descriptorCount = 1;
         ubw.pBufferInfo = &ub;
 
+        VkDescriptorBufferInfo empty_info = {};
+        empty_info.buffer = VK_NULL_HANDLE;
+        empty_info.range = VK_WHOLE_SIZE;
+
         VkWriteDescriptorSet vbw = {};
         vbw.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         vbw.dstSet = pipe->descriptor_sets[i];
         vbw.dstBinding = 2;
         vbw.dstArrayElement = 0;
         vbw.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-
-        VkDescriptorBufferInfo empty_info = {};
-        empty_info.buffer = VK_NULL_HANDLE;
-        empty_info.range = VK_WHOLE_SIZE;
         if(vbufs.size()) {
             vbw.descriptorCount = vbufs.size();
             vbw.pBufferInfo = vbufs.data();
@@ -703,8 +736,30 @@ void RTPipe::create_desc(const Scene& scene) {
             ibw.pBufferInfo = &empty_info;
         }
 
-        VkWriteDescriptorSet writes[] = {ubw, vbw, ibw};
-        vkUpdateDescriptorSets(vk().device(), 3, writes, 0, nullptr);
+        std::vector<VkDescriptorImageInfo> t_imgs;
+        for(auto& view : texture_views) {
+            VkDescriptorImageInfo img = {};
+            img.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            img.imageView = view->view;
+            img.sampler = texture_sampler->sampler;
+            t_imgs.push_back(img);
+        }
+        
+        VkWriteDescriptorSet tbw = {};
+        tbw.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        tbw.dstSet = pipe->descriptor_sets[i];
+        tbw.dstBinding = 4;
+        tbw.dstArrayElement = 0;
+        tbw.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        tbw.pImageInfo = t_imgs.data();
+        tbw.descriptorCount = t_imgs.size();
+
+        std::vector<VkWriteDescriptorSet> writes = {ubw, vbw, ibw};
+
+        if(tbw.descriptorCount > 0)
+            writes.push_back(tbw);
+
+        vkUpdateDescriptorSets(vk().device(), writes.size(), writes.data(), 0, nullptr);
     }
 }
 

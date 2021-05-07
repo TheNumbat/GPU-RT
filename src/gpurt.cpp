@@ -94,7 +94,7 @@ static std::vector<std::pair<Vec4, Vec4>> gen_rays(int N, const BBox& boundingBo
 
 GPURT::GPURT(Window& window, std::string scene_file) : window(window), cam(window.drawable()) {
 
-    scene.load(Scene::Load_Opts(), scene_file, cam);
+    scene.load(scene_file, cam);
 
     build_images();
     build_pass();
@@ -517,20 +517,15 @@ void GPURT::build_accel() {
     }
 }
 
-void GPURT::load_scene(bool clear) {
+void GPURT::load_scene() {
 
     char* path = nullptr;
     NFD_OpenDialog(scene_file_types, nullptr, &path);
     if(!path) return;
 
-    if(clear) {
-        selected_id = 0;
-    }
+    selected_id = 0;
 
-    Scene::Load_Opts load_opt;
-    load_opt.new_scene = clear;
-
-    scene.load(load_opt, std::string(path), cam);
+    scene.load(std::string(path), cam);
     free(path);
 
     rebuild_blas = rebuild_tlas = true;
@@ -551,8 +546,7 @@ void GPURT::UIsidebar() {
     ImGui::Text("FPS: %f", ImGui::GetIO().Framerate);
 
     ImGui::Text("Edit Scene");
-    if(ImGui::Button("Open Scene")) load_scene(true);
-    if(ImGui::Button("Import Objects")) load_scene(false);
+    if(ImGui::Button("Open Scene")) load_scene();
     ImGui::Separator();
 
     ImGui::Checkbox("Use RTX", &use_rt);
@@ -631,33 +625,13 @@ void GPURT::UIsidebar() {
 
 void GPURT::edit_material(Material& opt) {
 
-    ImGui::Combo("Type", (int*)&opt.type, Material_Type_Names, (int)Material_Type::count);
+    ImGui::ColorEdit3("Albedo", opt.albedo.data);
+    ImGui::ColorEdit3("Emissive", opt.emissive.data);
+    ImGui::DragFloat2("Metal/Rough", opt.metal_rough.data, 0.1f, 0.0f, 1.0f);
 
-    switch(opt.type) {
-    case Material_Type::lambertian: {
-        ImGui::ColorEdit3("Albedo", opt.albedo.data);
-    } break;
-    case Material_Type::mirror: {
-        ImGui::ColorEdit3("Reflectance", opt.reflectance.data);
-    } break;
-    case Material_Type::refract: {
-        ImGui::ColorEdit3("Transmittance", opt.transmittance.data);
-        ImGui::DragFloat("Index of Refraction", &opt.ior, 0.1f, 0.0f,
-                         std::numeric_limits<float>::max(), "%.2f");
-    } break;
-    case Material_Type::glass: {
-        ImGui::ColorEdit3("Reflectance", opt.reflectance.data);
-        ImGui::ColorEdit3("Transmittance", opt.transmittance.data);
-        ImGui::DragFloat("Index of Refraction", &opt.ior, 0.1f, 0.0f,
-                         std::numeric_limits<float>::max(), "%.2f");
-    } break;
-    case Material_Type::diffuse_light: {
-        ImGui::ColorEdit3("Emissive", opt.emissive.data);
-        ImGui::DragFloat("Intensity", &opt.intensity, 0.1f, 0.0f, std::numeric_limits<float>::max(),
-                         "%.2f");
-    } break;
-    default: break;
-    }
+    ImGui::SliderInt("Albedo tex", &opt.albedo_tex, -1, scene.n_textures() - 1);
+    ImGui::SliderInt("Emissive tex", &opt.emissive_tex, -1, scene.n_textures() - 1);
+    ImGui::SliderInt("Metal/Rough tex", &opt.metal_rough_tex, -1, scene.n_textures() - 1);
 }
 
 void GPURT::loop() {

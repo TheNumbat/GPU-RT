@@ -142,8 +142,6 @@ add_shader(fcpw-gpu "bvh/bvh_wide4.comp")
 
 target_include_directories(fcpw-gpu PRIVATE "deps/")
 target_include_directories(fcpw-gpu PRIVATE "src/")
-target_include_directories(fcpw-gpu PRIVATE "deps/" "deps/assimp/include")
-target_include_directories(fcpw-gpu PRIVATE "${CMAKE_BINARY_DIR}/deps/assimp/include")
 
 # build dependencies
 
@@ -154,25 +152,12 @@ add_subdirectory("deps/nfd/")
 find_package(Vulkan REQUIRED FATAL_ERROR)
 target_include_directories(fcpw-gpu PRIVATE ${VULKAN_INCLUDE_DIRS})
 
-set(ASSIMP_BUILD_COLLADA_IMPORTER TRUE)
-set(ASSIMP_BUILD_OBJ_IMPORTER TRUE)
-set(ASSIMP_BUILD_PLY_IMPORTER TRUE)
-set(ASSIMP_BUILD_FBX_IMPORTER TRUE)
-set(ASSIMP_BUILD_GLTF_IMPORTER TRUE)
-set(ASSIMP_BUILD_3DS_IMPORTER TRUE)
-set(ASSIMP_BUILD_STL_IMPORTER TRUE)
-set(ASSIMP_BUILD_BLEND_IMPORTER TRUE)
-set(ASSIMP_BUILD_COLLADA_EXPORTER TRUE)
-add_subdirectory("deps/assimp/")
-include_directories(${ASSIMP_INCLUDE_DIRS})
-
 # link libraries
 
 target_link_libraries(fcpw-gpu PRIVATE imgui)
 target_link_libraries(fcpw-gpu PRIVATE sf_libs)
 target_link_libraries(fcpw-gpu PRIVATE nfd)
 target_link_libraries(fcpw-gpu PRIVATE ${Vulkan_LIBRARY})
-target_link_libraries(fcpw-gpu PRIVATE assimp)
 
 if(WIN32)
     target_include_directories(fcpw-gpu PRIVATE "deps/win")

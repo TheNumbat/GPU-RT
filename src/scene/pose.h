@@ -3,6 +3,8 @@
 
 #include <lib/mathlib.h>
 
+constexpr float GLOBAL_SCALE = 0.05f;
+
 struct Pose {
     Vec3 pos;
     Vec3 euler;

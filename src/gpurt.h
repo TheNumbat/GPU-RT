@@ -35,7 +35,7 @@ private:
     void apply_window_dim(Vec2 new_dim);
 
     void UIsidebar();
-    void load_scene(bool clear);
+    void load_scene();
     void edit_material(Material& opt);
 
     void build_images();
@@ -81,6 +81,5 @@ private:
 
     VK::MeshPipe mesh_pipe;
     VK::RTPipe rt_pipe;
-
     VK::BVHPipe bvh_pipe;
 };

@@ -60,6 +60,12 @@ struct Image {
         return true;
     }
 
+    void reload(unsigned int w, unsigned int h, std::vector<unsigned char>&& data) {
+        _w = w;
+        _h = h;
+        _data = std::move(data);
+    }
+
     static std::optional<Image> load(std::string path) {
         Image ret;
         if(ret.reload(path)) {

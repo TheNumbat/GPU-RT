@@ -116,19 +116,33 @@ struct RTPipe {
 
 private:
     struct alignas(16) Scene_Desc {
-        Mat4 model, modelIT;
+        Mat4 model;
+        Mat4 modelIT;
+        Vec4 albedo;
+        Vec4 emissive;
+        Vec4 metal_rough;
+        int albedo_tex;
+        int emissive_tex;
+        int metal_rough_tex;
         unsigned int index;
     };
 
     std::vector<Drop<Buffer>> camera_uniforms;
+    
     Drop<Buffer> sbt;
     Drop<Buffer> desc_buf;
+
+    std::vector<VK::Drop<VK::Image>> textures;
+    std::vector<VK::Drop<VK::ImageView>> texture_views;
+    VK::Drop<VK::Sampler> texture_sampler;
+
     RTPipe_Constants consts;
 
     void create_sbt();
     void create_pipe();
     void create_desc(const Scene& scene);
     void build_desc(const Scene& scene);
+    void build_textures(const Scene& scene);
 };
 
 } // namespace VK

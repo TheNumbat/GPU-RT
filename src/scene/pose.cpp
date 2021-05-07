@@ -2,7 +2,7 @@
 #include "pose.h"
 
 Mat4 Pose::transform() const {
-    return Mat4::translate(pos) * rotation_mat() * Mat4::scale(scale);
+    return Mat4::translate(pos) * rotation_mat() * Mat4::scale(scale) * Mat4::scale(Vec3{GLOBAL_SCALE});
 }
 
 Mat4 Pose::rotation_mat() const {

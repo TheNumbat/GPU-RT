@@ -550,11 +550,13 @@ void GPURT::UIsidebar() {
     if(ImGui::Button("Open Scene")) load_scene();
     ImGui::Separator();
 
-    ImGui::Checkbox("Use RTX", &use_rt);
-    ImGui::Separator();
+    bool change = false;
+    change = change || ImGui::Checkbox("Use RTX", &use_rt);
+    change = change || ImGui::SliderInt("Max Frames", &rt_pipe.max_frames, 1, 128);
+    change = change || ImGui::SliderInt("Samples", &rt_pipe.samples_per_frame, 1, 128);
+    if(change) rt_pipe.reset_frame();
 
-    ImGui::SliderInt("Max Frames", &rt_pipe.max_frames, 1, 128);
-    ImGui::SliderInt("Samples", &rt_pipe.samples_per_frame, 1, 128);
+    ImGui::Separator();
 
     if(!scene.empty()) {
         ImGui::Text("Select an Object");

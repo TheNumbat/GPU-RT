@@ -341,6 +341,7 @@ void RTPipe::recreate(const Scene& scene) {
     build_desc(scene);
     create_pipe();
     create_sbt();
+    reset_frame();
 }
 
 void RTPipe::build_desc(const Scene& scene) {

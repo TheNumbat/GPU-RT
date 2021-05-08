@@ -402,7 +402,7 @@ void RTPipe::update_uniforms(const Camera& cam) {
     ubo.iV = ubo.V.inverse();
     ubo.iP = ubo.P.inverse();
 
-    if(std::memcmp(&ubo, &old_cam, sizeof(Cam_Uniforms))) {
+    if(consts.frame >= 0 && std::memcmp(&ubo, &old_cam, sizeof(Cam_Uniforms))) {
         reset_frame();
         old_cam = ubo;
     }

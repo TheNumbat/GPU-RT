@@ -19,19 +19,6 @@ public:
 private:
     void event(SDL_Event e);
     void render();
-
-    void run_tests();
-    void benchmark_rng();
-    void benchmark_primary();
-    
-    void test_cpq(const std::vector<Vec4>& queries, const std::vector<Vec4>& reference, bool print,
-                  VK::BVH_Type type, int w = 0);
-    void test_ray(const std::vector<std::pair<Vec4, Vec4>>& queries,
-                  const std::vector<Vec4>& reference, bool print, VK::BVH_Type type, int w = 1);
-
-    void time_cpqs(const std::vector<Vec4>& queries, VK::BVH_Type type, int w = 1);
-    void time_rays(const std::vector<std::pair<Vec4, Vec4>>& queries, VK::BVH_Type type, int w = 1);
-
     void apply_window_dim(Vec2 new_dim);
 
     void UIsidebar();

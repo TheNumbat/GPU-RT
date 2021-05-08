@@ -34,8 +34,12 @@ set(SOURCES_CLIENT "src/main.cpp"
                    "src/vk/vulkan.cpp"
                    "src/vk/imgui_impl_vulkan.h"
                    "src/vk/imgui_impl_vulkan.cpp"
-                   "src/vk/render.h"
-                   "src/vk/render.cpp")
+                   "src/vk/rt.h"
+                   "src/vk/rt.cpp"
+                   "src/vk/mesh.h"
+                   "src/vk/mesh.cpp"
+                   "src/vk/effect.h"
+                   "src/vk/effect.cpp")
 
 # setup OS-specific options
 
@@ -109,8 +113,10 @@ find_program(GLSLC glslc)
     target_sources(${TARGET} PRIVATE ${current-output-path})
 endfunction(add_shader)
 
-add_shader(fcpw-gpu "out.vert")
+add_shader(fcpw-gpu "quad.vert")
 add_shader(fcpw-gpu "out.frag")
+add_shader(fcpw-gpu "tonemap.frag")
+
 add_shader(fcpw-gpu "mesh.vert")
 add_shader(fcpw-gpu "mesh.frag")
 

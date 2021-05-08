@@ -2,10 +2,14 @@
 #pragma once
 
 #include <SDL2/SDL.h>
+#include <platform/window.h>
+
 #include <lib/mathlib.h>
 #include <scene/scene.h>
 
-#include "platform/window.h"
+#include <vk/rt.h>
+#include <vk/effect.h>
+#include <vk/mesh.h>
 
 class GPURT {
 public:
@@ -52,7 +56,7 @@ private:
     struct Frame {
         VK::Drop<VK::Image> color, depth;
         VK::Drop<VK::ImageView> color_view, depth_view;
-        VK::Drop<VK::Framebuffer> fb;
+        VK::Drop<VK::Framebuffer> m_fb, ef_fb;
     };
 
     bool use_rt = true;
@@ -60,8 +64,9 @@ private:
     bool rebuild_blas = true;
 
     std::array<Frame, VK::Manager::MAX_IN_FLIGHT> frames;
-    VK::Drop<VK::Pass> mesh_pass;
+    VK::Drop<VK::Pass> mesh_pass, effect_pass;
 
     VK::MeshPipe mesh_pipe;
+    VK::EffectPipe effect_pipe;
     VK::RTPipe rt_pipe;
 };

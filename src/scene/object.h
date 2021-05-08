@@ -3,7 +3,7 @@
 
 #include "material.h"
 #include "pose.h"
-#include <vk/render.h>
+#include <vk/mesh.h>
 
 class Object {
 public:

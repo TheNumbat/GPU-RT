@@ -10,7 +10,7 @@
 #define VMA_IMPLEMENTATION
 #include "vk_mem_alloc.h"
 
-#include "render.h"
+#include "mesh.h"
 
 namespace VK {
 
@@ -1515,7 +1515,7 @@ void Manager::Compositor::init() {
 
 void Manager::Compositor::create_pipe() {
 
-    Shader v_mod(File::read("shaders/out.vert.spv").value());
+    Shader v_mod(File::read("shaders/quad.vert.spv").value());
     Shader f_mod(File::read("shaders/out.frag.spv").value());
 
     VkPipelineShaderStageCreateInfo stage_info[2] = {};

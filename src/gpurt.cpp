@@ -41,28 +41,17 @@ void GPURT::render() {
         rt_pipe.use_image(rt_target_view);
         rt_pipe.use_accel(TLAS);
         rt_pipe.update_uniforms(cam);
+        rt_pipe.trace(cam, cmds, {rt_target->w, rt_target->h});
         
-        if(rt_pipe.trace(cam, cmds, {rt_target->w, rt_target->h})) {
-
-            VkImageBlit region = {};
-            region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            region.srcSubresource.layerCount = 1;
-            region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            region.dstSubresource.layerCount = 1;
-            region.dstOffsets[1] = {(int)f.color->w, (int)f.color->h, 1};
-            region.srcOffsets[1] = {(int)rt_target->w, (int)rt_target->h, 1};
-
-            rt_target->transition(cmds, VK_IMAGE_LAYOUT_GENERAL,
-                                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-            f.color->transition(cmds, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-            vkCmdBlitImage(cmds, rt_target->img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, f.color->img,
-                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region, VK_FILTER_NEAREST);
-            f.color->transition(cmds, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        rt_target->transition(cmds, VK_IMAGE_LAYOUT_GENERAL,
                                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-            rt_target->transition(cmds, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                    VK_IMAGE_LAYOUT_GENERAL);
-        }
+
+        effect_pass->begin(cmds, f.ef_fb, {});
+        effect_pipe.tonemap(cmds, rt_target_view);
+        effect_pass->end(cmds);
+
+        rt_target->transition(cmds, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                VK_IMAGE_LAYOUT_GENERAL);
 
     } else {
         VkClearValue col, depth;
@@ -70,7 +59,7 @@ void GPURT::render() {
         depth.depthStencil = {0.0f, 0};
 
         mesh_pipe.update_uniforms(cam);
-        mesh_pass->begin(cmds, f.fb, {col, depth});
+        mesh_pass->begin(cmds, f.m_fb, {col, depth});
 
         scene.for_objs([&, this](const Object& obj) {
             obj.mesh().render(cmds, mesh_pipe.pipe, obj.pose.transform() * Mat4::scale(Vec3{scene.scale}));
@@ -82,55 +71,95 @@ void GPURT::render() {
 
 void GPURT::build_pass() {
 
-    VkAttachmentDescription color = {};
-    color.format = frames[0].color->format;
-    color.samples = VK_SAMPLE_COUNT_1_BIT;
-    color.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    color.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    color.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    color.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    color.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    {
+        VkAttachmentDescription color = {};
+        color.format = frames[0].color->format;
+        color.samples = VK_SAMPLE_COUNT_1_BIT;
+        color.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        color.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        color.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        color.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        color.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-    VkAttachmentDescription depth = {};
-    depth.format = frames[0].depth->format;
-    depth.samples = VK_SAMPLE_COUNT_1_BIT;
-    depth.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    depth.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depth.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    depth.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depth.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    depth.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        VkAttachmentDescription depth = {};
+        depth.format = frames[0].depth->format;
+        depth.samples = VK_SAMPLE_COUNT_1_BIT;
+        depth.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depth.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depth.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        depth.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depth.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        depth.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-    VkAttachmentReference color_ref = {};
-    color_ref.attachment = 0;
-    color_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    VkAttachmentReference depth_ref = {};
-    depth_ref.attachment = 1;
-    depth_ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        VkAttachmentReference color_ref = {};
+        color_ref.attachment = 0;
+        color_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        VkAttachmentReference depth_ref = {};
+        depth_ref.attachment = 1;
+        depth_ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-    VkSubpassDependency d0 = {}, d1 = {};
-    d0.srcSubpass = VK_SUBPASS_EXTERNAL;
-    d0.dstSubpass = 0;
-    d0.srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-    d0.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    d0.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    d0.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    d0.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-    d1.srcSubpass = 0;
-    d1.dstSubpass = VK_SUBPASS_EXTERNAL;
-    d1.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    d1.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-    d1.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    d1.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    d1.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+        VkSubpassDependency d0 = {}, d1 = {};
+        d0.srcSubpass = VK_SUBPASS_EXTERNAL;
+        d0.dstSubpass = 0;
+        d0.srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        d0.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        d0.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        d0.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        d0.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+        d1.srcSubpass = 0;
+        d1.dstSubpass = VK_SUBPASS_EXTERNAL;
+        d1.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        d1.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        d1.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        d1.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        d1.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
-    VK::Pass::Subpass sp;
-    sp.bind = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    sp.color = {color_ref};
-    sp.depth = depth_ref;
+        VK::Pass::Subpass sp;
+        sp.bind = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        sp.color = {color_ref};
+        sp.depth = depth_ref;
 
-    mesh_pass->recreate({{color, depth}, {sp}, {d0, d1}});
+        mesh_pass->recreate({{color, depth}, {sp}, {d0, d1}});
+    }
+
+    {
+        VkAttachmentDescription color = {};
+        color.format = frames[0].color->format;
+        color.samples = VK_SAMPLE_COUNT_1_BIT;
+        color.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        color.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        color.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        color.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        color.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        VkAttachmentReference color_ref = {};
+        color_ref.attachment = 0;
+        color_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+        VkSubpassDependency d0 = {}, d1 = {};
+        d0.srcSubpass = VK_SUBPASS_EXTERNAL;
+        d0.dstSubpass = 0;
+        d0.srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        d0.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        d0.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        d0.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        d0.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+        d1.srcSubpass = 0;
+        d1.dstSubpass = VK_SUBPASS_EXTERNAL;
+        d1.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        d1.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        d1.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        d1.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        d1.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+        VK::Pass::Subpass sp;
+        sp.bind = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        sp.color = {color_ref};
+
+        effect_pass->recreate({{color}, {sp}, {d0, d1}});
+    }
 }
 
 void GPURT::build_images() {
@@ -154,7 +183,7 @@ void GPURT::build_images() {
 
     rt_target->recreate(ext.width, ext.height, VK_FORMAT_R32G32B32A32_SFLOAT,
                             VK_IMAGE_TILING_OPTIMAL,
-                            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
                             VMA_MEMORY_USAGE_GPU_ONLY);
     rt_target->transition(VK_IMAGE_LAYOUT_GENERAL);
     rt_target_view->recreate(rt_target, VK_IMAGE_ASPECT_COLOR_BIT);
@@ -165,12 +194,16 @@ void GPURT::build_pipe() {
     VK::Manager& vk = VK::vk();
     VkExtent2D ext = vk.extent();
 
+    effect_pipe.recreate(effect_pass, ext);
     mesh_pipe.recreate(mesh_pass, ext);
     rt_pipe.recreate(scene);
 
     for(Frame& f : frames) {
         std::vector<std::reference_wrapper<VK::ImageView>> views = {f.color_view, f.depth_view};
-        f.fb->recreate(ext.width, ext.height, mesh_pass, views);
+        f.m_fb->recreate(ext.width, ext.height, mesh_pass, views);
+
+        std::vector<std::reference_wrapper<VK::ImageView>> views_col = {f.color_view};
+        f.ef_fb->recreate(ext.width, ext.height, effect_pass, views_col);
     }
 }
 
@@ -239,6 +272,8 @@ void GPURT::UIsidebar() {
     change = change || ImGui::ColorEdit3("ClearCol", rt_pipe.clear.data);
     change = change || ImGui::ColorEdit3("EnvLight", rt_pipe.env.data);
     change = change || ImGui::DragFloat("Intensity", &rt_pipe.env_scale, 0.1f, 0.0f, FLT_MAX);
+    ImGui::DragFloat("Exposure", &effect_pipe.exposure, 0.01f, 0.01f, 10.0f);
+    ImGui::DragFloat("Gamma", &effect_pipe.gamma, 0.01f, 0.01f, 5.0f);
     if(change) rt_pipe.reset_frame();
     
     if(ImGui::DragFloat("Scale", &scene.scale, 0.01f, 0.01f, 10.0f)) {

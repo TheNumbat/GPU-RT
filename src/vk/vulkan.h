@@ -38,6 +38,10 @@ inline unsigned int align_up(unsigned int v, unsigned int a) {
     return (v + a - 1) & ~(a - 1);
 }
 
+struct Cam_Uniforms {
+    Mat4 V, P, iV, iP;
+};
+
 class Manager;
 
 struct Buffer;

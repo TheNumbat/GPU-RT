@@ -3,7 +3,7 @@
 
 #include <lib/mathlib.h>
 
-constexpr float GLOBAL_SCALE = 0.05f;
+constexpr float GLOBAL_SCALE = 1.0f;//0.05f;
 
 struct Pose {
     Vec3 pos;

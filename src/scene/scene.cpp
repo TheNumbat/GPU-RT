@@ -45,34 +45,10 @@ Object& Scene::get(unsigned int id) {
 	return entry->second;
 }
 
-std::string Scene::load(std::string file, Camera& cam) {
-
-	clear();
+void Scene::parse_mesh(tinygltf::Model& model, tinygltf::Mesh& gltfMesh, Pose pose) {
 
 	using namespace tinygltf;
-
-	Model model;
-	TinyGLTF loader;
-	std::string err;
-	std::string warn;
-	bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, file);
-
-	if (!warn.empty()) {
-		warn("%s\n", warn.c_str());
-	}
-
-	if (!err.empty()) {
-		warn("Err: %s\n", err.c_str());
-	}
-
-	if (!ret) {
-		warn("Failed to parse glTF\n");
-	}
-
-	for (const auto &gltfMesh : model.meshes) {
-
-		// Create a mesh object
-		for (const auto &meshPrimitive : gltfMesh.primitives) {
+	for (const auto &meshPrimitive : gltfMesh.primitives) {
 		
 		std::vector<Vec3> positions, normals;
 		std::vector<Vec2> texcoords;
@@ -299,12 +275,64 @@ std::string Scene::load(std::string file, Camera& cam) {
 			verts.push_back({Vec4{p, tc.x}, Vec4{n, tc.y}});
 		}
 
-		add(Object(reserve_id(), {}, VK::Mesh(std::move(verts), std::move(indices)), mat));
+		add(Object(reserve_id(), pose, VK::Mesh(std::move(verts), std::move(indices)), mat));
+	}
+}
+
+std::string Scene::load(std::string file, Camera& cam) {
+
+	clear();
+
+	using namespace tinygltf;
+
+	Model model;
+	TinyGLTF loader;
+	std::string err;
+	std::string warn;
+	bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, file);
+
+	if(!warn.empty()) {
+		warn("%s\n", warn.c_str());
+	}
+
+	if(!err.empty()) {
+		warn("Err: %s\n", err.c_str());
+	}
+
+	if(!ret) {
+		warn("Failed to parse glTF\n");
+	}
+
+	std::function<void(int, Mat4)> load_node;
+	load_node = [&, this](int n, Mat4 T) {
+		
+		auto& node = model.nodes[n];
+		Mat4 M;
+		for(int i = 0; i < 16 && i < node.matrix.size(); i++)
+			M.data[i] = (float)node.matrix[i];
+		
+		T = T * M.T();
+		Pose pose;
+		T.decompose(pose.pos, pose.scale, pose.euler);
+		
+		if(node.mesh >= 0)
+			parse_mesh(model, model.meshes[node.mesh], pose);
+
+		for(auto& child : node.children) {
+			load_node(child, T);
+		}
+	};
+
+	for(auto& scene : model.scenes) {
+		for(auto& root : scene.nodes) {
+			load_node(root, Mat4::I);
 		}
 	}
 
 	// Iterate through all texture declaration in glTF file
-	for (const auto &gltfTexture : model.textures) {
+	for(const auto &gltfTexture : model.textures) {
+		if(gltfTexture.source >= model.images.size()) continue;
+
 		Util::Image tex;
 		const auto &image = model.images[gltfTexture.source];
 		assert(image.component == 4);

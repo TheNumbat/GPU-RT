@@ -38,29 +38,31 @@ void GPURT::render() {
     if(use_rt) {
         build_accel();
 
-        rt_pipe.use_image(f.rt_target_view);
+        rt_pipe.use_image(rt_target_view);
         rt_pipe.use_accel(TLAS);
         rt_pipe.update_uniforms(cam);
-        rt_pipe.trace(cam, cmds, {f.color->w, f.color->h});
+        
+        if(rt_pipe.trace(cam, cmds, {rt_target->w, rt_target->h})) {
 
-        VkImageBlit region = {};
-        region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        region.srcSubresource.layerCount = 1;
-        region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        region.dstSubresource.layerCount = 1;
-        region.dstOffsets[1] = {(int)f.rt_target->w, (int)f.rt_target->h, 1};
-        region.srcOffsets[1] = {(int)f.rt_target->w, (int)f.rt_target->h, 1};
+            VkImageBlit region = {};
+            region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            region.srcSubresource.layerCount = 1;
+            region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            region.dstSubresource.layerCount = 1;
+            region.dstOffsets[1] = {(int)f.color->w, (int)f.color->h, 1};
+            region.srcOffsets[1] = {(int)rt_target->w, (int)rt_target->h, 1};
 
-        f.rt_target->transition(cmds, VK_IMAGE_LAYOUT_GENERAL,
-                                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-        f.color->transition(cmds, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-        vkCmdBlitImage(cmds, f.rt_target->img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, f.color->img,
-                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region, VK_FILTER_NEAREST);
-        f.color->transition(cmds, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-        f.rt_target->transition(cmds, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                VK_IMAGE_LAYOUT_GENERAL);
+            rt_target->transition(cmds, VK_IMAGE_LAYOUT_GENERAL,
+                                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+            f.color->transition(cmds, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+            vkCmdBlitImage(cmds, rt_target->img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, f.color->img,
+                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region, VK_FILTER_NEAREST);
+            f.color->transition(cmds, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            rt_target->transition(cmds, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                    VK_IMAGE_LAYOUT_GENERAL);
+        }
 
     } else {
         VkClearValue col, depth;
@@ -71,7 +73,7 @@ void GPURT::render() {
         mesh_pass->begin(cmds, f.fb, {col, depth});
 
         scene.for_objs([&, this](const Object& obj) {
-            obj.mesh().render(cmds, mesh_pipe.pipe, obj.pose.transform());
+            obj.mesh().render(cmds, mesh_pipe.pipe, obj.pose.transform() * Mat4::scale(Vec3{scene.scale}));
         });
 
         mesh_pass->end(cmds);
@@ -144,18 +146,18 @@ void GPURT::build_images() {
         f.depth->recreate(ext.width, ext.height, vk.find_depth_format(), VK_IMAGE_TILING_OPTIMAL,
                           VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
 
-        f.rt_target->recreate(ext.width, ext.height, VK_FORMAT_R32G32B32A32_SFLOAT,
-                              VK_IMAGE_TILING_OPTIMAL,
-                              VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-                              VMA_MEMORY_USAGE_GPU_ONLY);
-
         f.color->transition(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-        f.rt_target->transition(VK_IMAGE_LAYOUT_GENERAL);
 
         f.color_view->recreate(f.color, VK_IMAGE_ASPECT_COLOR_BIT);
         f.depth_view->recreate(f.depth, VK_IMAGE_ASPECT_DEPTH_BIT);
-        f.rt_target_view->recreate(f.rt_target, VK_IMAGE_ASPECT_COLOR_BIT);
     }
+
+    rt_target->recreate(ext.width, ext.height, VK_FORMAT_R32G32B32A32_SFLOAT,
+                            VK_IMAGE_TILING_OPTIMAL,
+                            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                            VMA_MEMORY_USAGE_GPU_ONLY);
+    rt_target->transition(VK_IMAGE_LAYOUT_GENERAL);
+    rt_target_view->recreate(rt_target, VK_IMAGE_ASPECT_COLOR_BIT);
 }
 
 void GPURT::build_pipe() {
@@ -165,7 +167,6 @@ void GPURT::build_pipe() {
 
     mesh_pipe.recreate(mesh_pass, ext);
     rt_pipe.recreate(scene);
-    bvh_pipe.recreate();
 
     for(Frame& f : frames) {
         std::vector<std::reference_wrapper<VK::ImageView>> views = {f.color_view, f.depth_view};
@@ -188,7 +189,7 @@ void GPURT::build_accel() {
     if(rebuild_tlas) {
 
         BLAS_T.clear();
-        scene.for_objs([this](const Object& obj) { BLAS_T.push_back(obj.pose.transform()); });
+        scene.for_objs([this](const Object& obj) { BLAS_T.push_back(obj.pose.transform() * Mat4::scale(Vec3{scene.scale})); });
 
         TLAS.drop();
         TLAS->recreate(BLAS, BLAS_T);
@@ -232,9 +233,17 @@ void GPURT::UIsidebar() {
 
     bool change = false;
     change = change || ImGui::Checkbox("Use RTX", &use_rt);
-    change = change || ImGui::SliderInt("Max Frames", &rt_pipe.max_frames, 1, 128);
+    change = change || ImGui::SliderInt("Max Frames", &rt_pipe.max_frames, 1, 2048);
     change = change || ImGui::SliderInt("Samples", &rt_pipe.samples_per_frame, 1, 128);
+    change = change || ImGui::SliderInt("Depth", &rt_pipe.max_depth, 1, 32);
+    change = change || ImGui::ColorEdit3("ClearCol", rt_pipe.clear.data);
+    change = change || ImGui::ColorEdit3("EnvLight", rt_pipe.env.data);
+    change = change || ImGui::DragFloat("Intensity", &rt_pipe.env_scale, 0.1f, 0.0f, FLT_MAX);
     if(change) rt_pipe.reset_frame();
+    
+    if(ImGui::DragFloat("Scale", &scene.scale, 0.01f, 0.01f, 10.0f)) {
+        rebuild_tlas = true;
+    }
 
     ImGui::Separator();
 

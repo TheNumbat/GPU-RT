@@ -25,10 +25,6 @@ set(SOURCES_CLIENT "src/main.cpp"
                    "src/scene/object.cpp"
                    "src/scene/pose.h"
                    "src/scene/pose.cpp"
-                   "src/scene/bvh.h"
-                   "src/scene/bvh.cpp"
-                   "src/scene/obb.h"
-                   "src/scene/obb.cpp"
                    "src/scene/material.h"
                    "src/scene/material.cpp"
                    "src/platform/imgui_impl_sdl.h"
@@ -39,9 +35,7 @@ set(SOURCES_CLIENT "src/main.cpp"
                    "src/vk/imgui_impl_vulkan.h"
                    "src/vk/imgui_impl_vulkan.cpp"
                    "src/vk/render.h"
-                   "src/vk/render.cpp"
-                   "src/vk/compute.h"
-                   "src/vk/compute.cpp")
+                   "src/vk/render.cpp")
 
 # setup OS-specific options
 
@@ -128,16 +122,6 @@ add_shader(fcpw-gpu "rt/rt.rgen")
 add_shader(fcpw-gpu "rquery.rchit")
 add_shader(fcpw-gpu "rquery.rmiss")
 add_shader(fcpw-gpu "rquery.rgen")
-
-add_shader(fcpw-gpu "bvh/bvh_threaded.comp")
-add_shader(fcpw-gpu "bvh/bvh_brute.comp")
-add_shader(fcpw-gpu "bvh/bvh_stack.comp")
-add_shader(fcpw-gpu "bvh/bvh_obb.comp")
-
-add_shader(fcpw-gpu "bvh/bvh_wide1.comp")
-add_shader(fcpw-gpu "bvh/bvh_wide2.comp")
-add_shader(fcpw-gpu "bvh/bvh_wide3.comp")
-add_shader(fcpw-gpu "bvh/bvh_wide4.comp")
 
 # define include paths
 

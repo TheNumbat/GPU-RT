@@ -8,6 +8,7 @@
 #include <lib/mathlib.h>
 #include <util/camera.h>
 #include <util/image.h>
+#include <sf_libs/tiny_gltf.h>
 
 class Scene {
 public:
@@ -38,7 +39,10 @@ public:
         return textures;
     };
 
+    float scale = 1.0f;
+    
 private:
+    void parse_mesh(tinygltf::Model& model, tinygltf::Mesh& gltfMesh, Pose pose);
     std::unordered_map<unsigned int, Object> objs;
     std::vector<Util::Image> textures;
     unsigned int next_id, first_id;

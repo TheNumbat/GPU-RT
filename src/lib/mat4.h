@@ -232,6 +232,43 @@ struct Mat4 {
                cols[0][0] * cols[1][1] * cols[2][2] * cols[3][3];
     }
 
+    void decompose(Vec3& pos, Vec3& scale, Vec3& rot) {
+        const Mat4& _this = *this;
+        pos.x = _this[0][3];
+        pos.y = _this[1][3];
+        pos.z = _this[2][3];
+        Vec3 vCols[3] = {
+            Vec3(_this[0][0],_this[1][0],_this[2][0]),
+            Vec3(_this[0][1],_this[1][1],_this[2][1]),
+            Vec3(_this[0][2],_this[1][2],_this[2][2])
+        };
+        scale.x = vCols[0].norm();
+        scale.y = vCols[1].norm();
+        scale.z = vCols[2].norm();
+        if(det() < 0) scale = -scale;
+        if(scale.x) vCols[0] /= scale.x;
+        if(scale.y) vCols[1] /= scale.y;
+        if(scale.z) vCols[2] /= scale.z;
+
+        const float epsilon = 0.00001f;
+        rot.y  = std::asin(-vCols[0].z);
+        float C = std::cos(rot.y);
+        if(std::fabs(C) > epsilon) {
+            float tan_x = vCols[2].z / C;
+            float tan_y = vCols[1].z / C;
+            rot.x = std::atan2(tan_y, tan_x);
+            tan_x = vCols[0].x / C;
+            tan_y = vCols[0].y / C;
+            rot.z = std::atan2(tan_y, tan_x);
+        } else {
+            rot.x = 0;
+            float tan_x =  vCols[1].y;
+            float tan_y = -vCols[1].x;
+            rot.z = std::atan2(tan_y, tan_x);
+        }
+        rot = Degrees(rot);
+    }
+
     union {
         Vec4 cols[4];
         float data[16] = {};

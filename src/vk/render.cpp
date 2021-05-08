@@ -350,7 +350,7 @@ void RTPipe::build_desc(const Scene& scene) {
     scene.for_objs([&](const Object& obj) {
         Scene_Desc desc;
         desc.index = descs.size();
-        desc.model = obj.pose.transform();
+        desc.model = obj.pose.transform() * Mat4::scale(Vec3{scene.scale});
         desc.modelIT = desc.model.inverse().T();
         desc.albedo_tex = obj.material.albedo_tex;
         desc.metal_rough_tex = obj.material.metal_rough_tex;
@@ -448,15 +448,14 @@ void RTPipe::use_accel(const Accel& tlas) {
     vkUpdateDescriptorSets(vk().device(), 1, &acw, 0, nullptr);
 }
 
-void RTPipe::trace(const Camera& cam, VkCommandBuffer& cmds, VkExtent2D ext) {
+bool RTPipe::trace(const Camera& cam, VkCommandBuffer& cmds, VkExtent2D ext) {
 
-    if(consts.frame >= max_frames) return;
+    if(consts.frame >= max_frames) return false;
 
-    consts.clearColor = Vec4{0.22f, 0.22f, 0.22f, 1.0f};
-    consts.lightIntensity = 100.0f;
-    consts.lightPosition = Vec3{0.0f, 3.0f, 0.0f};
-    consts.lightType = 0;
+    consts.clearColor = Vec4{clear, 1.0f};
+    consts.envlight = Vec4{env_scale * env, 1.0f};
     consts.samples = samples_per_frame;
+    consts.depth = max_depth;
     consts.frame++;
 
     vkCmdBindPipeline(cmds, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipe->pipe);
@@ -480,6 +479,7 @@ void RTPipe::trace(const Camera& cam, VkCommandBuffer& cmds, VkExtent2D ext) {
 
     vk().rtx.vkCmdTraceRaysKHR(cmds, &addrs[0], &addrs[1], &addrs[2], &addrs[3], ext.width,
                                ext.height, 1);
+    return true;
 }
 
 void RTPipe::reset_frame() {

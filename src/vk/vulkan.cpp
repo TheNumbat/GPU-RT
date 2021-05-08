@@ -1646,6 +1646,7 @@ void Manager::create_instance() {
     info.dev_ext.push_back(VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME);
     info.dev_ext.push_back(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
     info.dev_ext.push_back(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
+    info.dev_ext.push_back(VK_KHR_SHADER_CLOCK_EXTENSION_NAME);
 
     unsigned int sdl_count = 0;
     if(!SDL_Vulkan_GetInstanceExtensions(window, &sdl_count, nullptr)) {
@@ -1899,10 +1900,17 @@ void Manager::create_logical_device_and_queues() {
     robust.pNext = &vk12_features;
     robust.nullDescriptor = VK_TRUE;
 
+    VkPhysicalDeviceShaderClockFeaturesKHR clock = {};
+    clock.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CLOCK_FEATURES_KHR;
+    clock.pNext = &robust;
+    clock.shaderDeviceClock = VK_TRUE;
+    clock.shaderSubgroupClock = VK_TRUE;
+
     VkPhysicalDeviceFeatures2 features2 = {};
     features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     features2.features.samplerAnisotropy = VK_TRUE;
-    features2.pNext = &robust;
+    features2.features.shaderInt64 = VK_TRUE;
+    features2.pNext = &clock;
 
     VkDeviceCreateInfo dev_info = {};
     dev_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;

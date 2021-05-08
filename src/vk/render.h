@@ -104,12 +104,16 @@ struct RTPipe {
     void use_image(const ImageView& out);
     void reset_frame();
 
-    void trace(const Camera& cam, VkCommandBuffer& cmds, VkExtent2D ext);
+    bool trace(const Camera& cam, VkCommandBuffer& cmds, VkExtent2D ext);
 
     Drop<PipeData> pipe;
 
-    int max_frames = 64;
+    int max_frames = 256;
     int samples_per_frame = 8;
+    int max_depth = 8;
+    Vec3 clear = Vec3{0.3f};
+    Vec3 env = Vec3{0.1f};
+    float env_scale = 1.f;
 
 private:
     struct alignas(16) Scene_Desc {
@@ -125,11 +129,10 @@ private:
     };
     struct RTPipe_Constants {
         Vec4 clearColor;
-        Vec3 lightPosition;
-        float lightIntensity;
-        int lightType;
+        Vec4 envlight;
         int frame = -1;
         int samples;
+        int depth;
     };
 
     std::vector<Drop<Buffer>> camera_uniforms;

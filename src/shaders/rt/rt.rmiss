@@ -7,5 +7,5 @@
 layout(location = 0) rayPayloadInEXT vec3 payload;
 
 void main() {
-    payload = clearColor.xyz;
+    payload = consts.clearColor.xyz;
 }

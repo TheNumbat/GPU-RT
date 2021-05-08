@@ -401,6 +401,11 @@ void RTPipe::update_uniforms(const Camera& cam) {
     ubo.iV = ubo.V.inverse();
     ubo.iP = ubo.P.inverse();
 
+    if(std::memcmp(&ubo, &old_cam, sizeof(Cam_Uniforms))) {
+        reset_frame();
+        old_cam = ubo;
+    }
+
     camera_uniforms[vk().frame()]->write(&ubo, sizeof(ubo));
 }
 
@@ -444,10 +449,14 @@ void RTPipe::use_accel(const Accel& tlas) {
 
 void RTPipe::trace(const Camera& cam, VkCommandBuffer& cmds, VkExtent2D ext) {
 
+    if(consts.frame >= max_frames) return;
+
     consts.clearColor = Vec4{0.22f, 0.22f, 0.22f, 1.0f};
     consts.lightIntensity = 100.0f;
     consts.lightPosition = Vec3{0.0f, 3.0f, 0.0f};
     consts.lightType = 0;
+    consts.samples = samples_per_frame;
+    consts.frame++;
 
     vkCmdBindPipeline(cmds, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipe->pipe);
     vkCmdBindDescriptorSets(cmds, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipe->p_layout, 0, 1,
@@ -470,6 +479,10 @@ void RTPipe::trace(const Camera& cam, VkCommandBuffer& cmds, VkExtent2D ext) {
 
     vk().rtx.vkCmdTraceRaysKHR(cmds, &addrs[0], &addrs[1], &addrs[2], &addrs[3], ext.width,
                                ext.height, 1);
+}
+
+void RTPipe::reset_frame() {
+    consts.frame = -1;
 }
 
 void RTPipe::create_sbt() {

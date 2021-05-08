@@ -84,13 +84,6 @@ private:
     void create_desc();
 };
 
-struct RTPipe_Constants {
-    Vec4 clearColor;
-    Vec3 lightPosition;
-    float lightIntensity;
-    int lightType;
-};
-
 struct RTPipe {
 
     RTPipe() = default;
@@ -109,10 +102,14 @@ struct RTPipe {
     void update_uniforms(const Camera& cam);
     void use_accel(const Accel& tlas);
     void use_image(const ImageView& out);
+    void reset_frame();
 
     void trace(const Camera& cam, VkCommandBuffer& cmds, VkExtent2D ext);
 
     Drop<PipeData> pipe;
+
+    int max_frames = 64;
+    int samples_per_frame = 8;
 
 private:
     struct alignas(16) Scene_Desc {
@@ -126,6 +123,14 @@ private:
         int metal_rough_tex;
         unsigned int index;
     };
+    struct RTPipe_Constants {
+        Vec4 clearColor;
+        Vec3 lightPosition;
+        float lightIntensity;
+        int lightType;
+        int frame = -1;
+        int samples;
+    };
 
     std::vector<Drop<Buffer>> camera_uniforms;
     
@@ -137,6 +142,7 @@ private:
     VK::Drop<VK::Sampler> texture_sampler;
 
     RTPipe_Constants consts;
+    Cam_Uniforms old_cam;
 
     void create_sbt();
     void create_pipe();

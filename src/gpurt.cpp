@@ -106,6 +106,7 @@ GPURT::GPURT(Window& window, std::string scene_file) : window(window), cam(windo
         build_images();
         build_pass();
         build_pipe();
+        rt_pipe.reset_frame();
     });
 
 #if 0
@@ -551,6 +552,9 @@ void GPURT::UIsidebar() {
 
     ImGui::Checkbox("Use RTX", &use_rt);
     ImGui::Separator();
+
+    ImGui::SliderInt("Max Frames", &rt_pipe.max_frames, 1, 128);
+    ImGui::SliderInt("Samples", &rt_pipe.samples_per_frame, 1, 128);
 
     if(!scene.empty()) {
         ImGui::Text("Select an Object");

@@ -62,7 +62,7 @@ void GPURT::render() {
         mesh_pass->begin(cmds, f.m_fb, {col, depth});
 
         scene.for_objs([&, this](const Object& obj) {
-            obj.mesh().render(cmds, mesh_pipe.pipe, obj.pose.transform() * Mat4::scale(Vec3{scene.scale}));
+            obj.mesh().render(cmds, mesh_pipe.pipe, Mat4::scale(Vec3{scene.scale}) * obj.pose.transform());
         });
 
         mesh_pass->end(cmds);
@@ -222,7 +222,7 @@ void GPURT::build_accel() {
     if(rebuild_tlas) {
 
         BLAS_T.clear();
-        scene.for_objs([this](const Object& obj) { BLAS_T.push_back(obj.pose.transform() * Mat4::scale(Vec3{scene.scale})); });
+        scene.for_objs([this](const Object& obj) { BLAS_T.push_back(Mat4::scale(Vec3{scene.scale}) * obj.pose.transform()); });
 
         TLAS.drop();
         TLAS->recreate(BLAS, BLAS_T);

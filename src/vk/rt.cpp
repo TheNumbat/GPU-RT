@@ -29,7 +29,7 @@ void RTPipe::build_desc(const Scene& scene) {
     scene.for_objs([&](const Object& obj) {
         Scene_Desc desc;
         desc.index = descs.size();
-        desc.model = obj.pose.transform() * Mat4::scale(Vec3{scene.scale});
+        desc.model = Mat4::scale(Vec3{scene.scale}) * obj.pose.transform();
         desc.modelIT = desc.model.inverse().T();
         desc.albedo_tex = obj.material.albedo_tex;
         desc.metal_rough_tex = obj.material.metal_rough_tex;

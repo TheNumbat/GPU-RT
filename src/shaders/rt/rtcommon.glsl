@@ -4,7 +4,7 @@
 #extension GL_EXT_scalar_block_layout : enable
 
 #define M_PI 3.141592
-#define LARGE_DIST 1000000000.0
+#define LARGE_DIST 10000000.0
 
 struct Scene_Obj {
 	mat4 model;
@@ -15,12 +15,14 @@ struct Scene_Obj {
 	int albedo_tex;
 	int emissive_tex;
 	int metal_rough_tex;
+	int normal_tex;
 	uint index;
 };
 
 struct Vertex {
 	vec4 pos_tx;
 	vec4 norm_ty;
+	vec4 tangent;
 };
 
 struct hitPayload {
@@ -39,6 +41,7 @@ layout(push_constant) uniform Constants
 	int frame;
 	int samples;
 	int max_depth;
+	int use_normal_map;
 } consts;
 
 // Generate a random unsigned int from two unsigned int values, using 16 pairs
@@ -70,19 +73,47 @@ float randf(inout uint prev) {
 	return (float(lcg(prev)) / float(0x01000000));
 }
 
-vec3 cosineHemisphere(inout uint seed, in vec3 x, in vec3 y, in vec3 z) {
-	float r1 = randf(seed);
-	float r2 = randf(seed);
-	float sq = sqrt(1.0 - r2);
-	vec3 direction = vec3(cos(2 * M_PI * r1) * sq, sin(2 * M_PI * r1) * sq, sqrt(r2));
+vec3 cosineHemisphere(inout uint seed, vec3 x, vec3 y, vec3 z) {
+	float phi = randf(seed);
+	float cosT2 = randf(seed);
+	float sinT = sqrt(1.0 - cosT2);
+	vec3 direction = vec3(cos(2 * M_PI * phi) * sinT, sin(2 * M_PI * phi) * sinT, sqrt(cosT2));
 	direction = direction.x * x + direction.y * y + direction.z * z;
 	return direction;
 }
 
-void normalCoords(in vec3 N, out vec3 Nt, out vec3 Nb) {
+void normalCoords(vec3 N, out vec3 Nt, out vec3 Nb) {
 	if(abs(N.x) > abs(N.y))
 		Nt = vec3(N.z, 0, -N.x) / sqrt(N.x * N.x + N.z * N.z);
 	else
 		Nt = vec3(0, -N.z, N.y) / sqrt(N.y * N.y + N.z * N.z);
 	Nb = cross(N, Nt);
+}
+
+vec3 cosinePowerHemisphere(float exponent, inout uint seed, vec3 x, vec3 y, vec3 z) {
+	float phi = randf(seed);
+	float cosT = pow(randf(seed), 1.0 / (exponent + 1.0));
+	float sinT = sqrt(1.0 - cosT*cosT);
+	vec3 direction = vec3(cos(2 * M_PI * phi) * sinT, sin(2 * M_PI * phi) * sinT, cosT);
+	direction = direction.x * x + direction.y * y + direction.z * z;
+	return direction;
+}
+
+bool bp_sample(float exp, vec3 d, inout uint seed, vec3 T, vec3 BT, vec3 N, out vec3 scatter) {
+	vec3 samp_N = cosinePowerHemisphere(exp, seed, T, BT, N);
+	scatter = reflect(d, samp_N);
+	return dot(N, scatter) > 0;
+}
+
+float bp_pdf(float exp, vec3 d, vec3 scatter, vec3 N) {
+	float iDn = dot(-d, N);
+	if(iDn <= 0 || dot(scatter, N) <= 0) return 0;
+	vec3 samp_N = normalize(scatter - d);
+	float cosine = max(dot(samp_N, N), 0);
+	float N_pdf = (exp + 1) / (2 * M_PI) * pow(cosine, exp);
+	return N_pdf / (4 * dot(-d, samp_N));
+}
+
+vec3 bp_eval(vec3 albedo, float pdf) {
+	return albedo * pdf;
 }

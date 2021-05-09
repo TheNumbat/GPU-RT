@@ -16,8 +16,9 @@ struct Mesh {
     struct Vertex {
         Vec4 pos;
         Vec4 norm;
+        Vec4 tang;
         static VkVertexInputBindingDescription bind_desc();
-        static std::array<VkVertexInputAttributeDescription, 2> attr_descs();
+        static std::array<VkVertexInputAttributeDescription, 3> attr_descs();
     };
 
     Mesh() = default;

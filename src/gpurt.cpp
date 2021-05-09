@@ -79,7 +79,7 @@ void GPURT::build_pass() {
         color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
         color.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         color.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        color.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        color.initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         color.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         VkAttachmentDescription depth = {};
@@ -272,9 +272,12 @@ void GPURT::UIsidebar() {
     change = change || ImGui::ColorEdit3("ClearCol", rt_pipe.clear.data);
     change = change || ImGui::ColorEdit3("EnvLight", rt_pipe.env.data);
     change = change || ImGui::DragFloat("Intensity", &rt_pipe.env_scale, 0.1f, 0.0f, FLT_MAX);
+    change = change || ImGui::Checkbox("Normal Maps", &rt_pipe.use_normal_map);
+    if(change) rt_pipe.reset_frame();
+    
     ImGui::DragFloat("Exposure", &effect_pipe.exposure, 0.01f, 0.01f, 10.0f);
     ImGui::DragFloat("Gamma", &effect_pipe.gamma, 0.01f, 0.01f, 5.0f);
-    if(change) rt_pipe.reset_frame();
+    ImGui::SliderInt("Tonemap", &effect_pipe.tonemap_type, 0, 1);
     
     if(ImGui::DragFloat("Scale", &scene.scale, 0.01f, 0.01f, 10.0f)) {
         rebuild_tlas = true;

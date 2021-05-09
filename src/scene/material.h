@@ -19,4 +19,5 @@ public:
     int emissive_tex;
     Vec2 metal_rough;
     int metal_rough_tex;
+    int normal_tex;
 };

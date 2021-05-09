@@ -51,6 +51,7 @@ void Scene::parse_mesh(tinygltf::Model& model, tinygltf::Mesh& gltfMesh, Pose po
 	for (const auto &meshPrimitive : gltfMesh.primitives) {
 		
 		std::vector<Vec3> positions, normals;
+		std::vector<Vec4> tangents;
 		std::vector<Vec2> texcoords;
 		std::vector<VK::Mesh::Index> indices;
 
@@ -184,6 +185,37 @@ void Scene::parse_mesh(tinygltf::Model& model, tinygltf::Mesh& gltfMesh, Pose po
 					}
 				}
 
+				if (attribute.first == "TANGENT") {
+					switch (attribAccessor.type) {
+						case TINYGLTF_TYPE_VEC4: {
+						switch (attribAccessor.componentType) {
+							case TINYGLTF_COMPONENT_TYPE_FLOAT:
+							for (size_t i = 0; i < count; i++) {
+								Vec4* v = (Vec4*)(dataPtr + i * byte_stride);
+								tangents.push_back(*v);
+							}
+						}
+						break;
+						case TINYGLTF_COMPONENT_TYPE_DOUBLE: {
+							switch (attribAccessor.type) {
+							case TINYGLTF_TYPE_VEC4: {
+								for (size_t i = 0; i < count; i++) {
+									double* values = (double*)(dataPtr + i * byte_stride);
+									Vec4 p{(float)values[0], (float)values[1], (float)values[2], (float)values[3]};
+									tangents.push_back(p);
+								}
+							} break;
+							default:
+								break;
+							}
+							break;
+							default:
+							break;
+						}
+						} break;
+					}
+				}
+
 				if (attribute.first == "NORMAL") {
 					switch (attribAccessor.type) {
 						case TINYGLTF_TYPE_VEC3: {
@@ -267,12 +299,15 @@ void Scene::parse_mesh(tinygltf::Model& model, tinygltf::Mesh& gltfMesh, Pose po
 		mat.metal_rough = Vec2{(float)glmat.pbrMetallicRoughness.metallicFactor, (float)glmat.pbrMetallicRoughness.roughnessFactor};
 		mat.metal_rough_tex = glmat.pbrMetallicRoughness.metallicRoughnessTexture.index;
 
+		mat.normal_tex = glmat.normalTexture.index;
+
 		std::vector<VK::Mesh::Vertex> verts;
 		for(size_t i = 0; i < positions.size(); i++) {
 			Vec3 p = positions[i];
 			Vec3 n = i < normals.size() ? normals[i] : Vec3{};
+			Vec4 t = i < tangents.size() ? tangents[i] : Vec4{};
 			Vec2 tc = i < texcoords.size() ? texcoords[i] : Vec2{};
-			verts.push_back({Vec4{p, tc.x}, Vec4{n, tc.y}});
+			verts.push_back({Vec4{p, tc.x}, Vec4{n, tc.y}, t});
 		}
 
 		add(Object(reserve_id(), pose, VK::Mesh(std::move(verts), std::move(indices)), mat));

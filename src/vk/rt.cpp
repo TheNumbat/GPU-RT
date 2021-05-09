@@ -34,6 +34,7 @@ void RTPipe::build_desc(const Scene& scene) {
         desc.albedo_tex = obj.material.albedo_tex;
         desc.metal_rough_tex = obj.material.metal_rough_tex;
         desc.emissive_tex = obj.material.emissive_tex;
+        desc.normal_tex = obj.material.normal_tex;
         desc.albedo = Vec4{obj.material.albedo, 0.0f};
         desc.emissive = Vec4{obj.material.emissive, 0.0f};
         desc.metal_rough = Vec4{obj.material.metal_rough.x, obj.material.metal_rough.y, 0.0f, 0.0f};
@@ -134,7 +135,8 @@ bool RTPipe::trace(const Camera& cam, VkCommandBuffer& cmds, VkExtent2D ext) {
     consts.clearColor = Vec4{clear, 1.0f};
     consts.envlight = Vec4{env_scale * env, 1.0f};
     consts.samples = samples_per_frame;
-    consts.depth = max_depth;
+    consts.max_depth = max_depth;
+    consts.use_normal_map = use_normal_map;
     consts.frame++;
 
     vkCmdBindPipeline(cmds, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipe->pipe);

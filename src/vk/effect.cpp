@@ -49,6 +49,7 @@ void EffectPipe::tonemap(VkCommandBuffer& cmds, const ImageView& image) {
 
     consts.exposure = exposure;
     consts.gamma = gamma;
+    consts.type = tonemap_type;
     
     vkCmdBindPipeline(cmds, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe->pipe);
 

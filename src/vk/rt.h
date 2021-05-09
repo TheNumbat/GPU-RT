@@ -39,8 +39,9 @@ struct RTPipe {
     int samples_per_frame = 8;
     int max_depth = 8;
     Vec3 clear = Vec3{0.3f};
-    Vec3 env = Vec3{0.1f};
-    float env_scale = 1.f;
+    Vec3 env = Vec3{1.0f};
+    float env_scale = 0.1f;
+    bool use_normal_map = false;
 
 private:
     struct alignas(16) Scene_Desc {
@@ -52,6 +53,7 @@ private:
         int albedo_tex;
         int emissive_tex;
         int metal_rough_tex;
+        int normal_tex;
         unsigned int index;
     };
     struct RTPipe_Constants {
@@ -59,7 +61,8 @@ private:
         Vec4 envlight;
         int frame = -1;
         int samples;
-        int depth;
+        int max_depth;
+        int use_normal_map;
     };
 
     std::vector<Drop<Buffer>> camera_uniforms;

@@ -24,7 +24,7 @@ struct EffectPipe {
 
     float exposure = 1.0f;
     float gamma = 2.2f;
-    int tonemap_type = 0;
+    int tonemap_type = 1;
 
 private:
     struct Push_Consts {

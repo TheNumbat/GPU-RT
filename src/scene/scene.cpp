@@ -324,7 +324,13 @@ std::string Scene::load(std::string file, Camera& cam) {
 	TinyGLTF loader;
 	std::string err;
 	std::string warn;
-	bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, file);
+
+	bool ret = false;
+	if(file.find("glb") != std::string::npos) {
+		ret = loader.LoadBinaryFromFile(&model, &err, &warn, file);
+	} else if(file.find("gltf") != std::string::npos) { 
+		ret = loader.LoadASCIIFromFile(&model, &err, &warn, file);
+	}
 
 	if(!warn.empty()) {
 		warn("%s\n", warn.c_str());

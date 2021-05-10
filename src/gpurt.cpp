@@ -275,7 +275,7 @@ void GPURT::UIsidebar() {
     change = change || ImGui::Checkbox("Normal Maps", &rt_pipe.use_normal_map);
     if(change) rt_pipe.reset_frame();
     
-    ImGui::DragFloat("Exposure", &effect_pipe.exposure, 0.01f, 0.01f, 10.0f);
+    ImGui::DragFloat("Exposure", &effect_pipe.exposure, 0.01f, 0.01f, 100.0f);
     ImGui::DragFloat("Gamma", &effect_pipe.gamma, 0.01f, 0.01f, 5.0f);
     ImGui::SliderInt("Tonemap", &effect_pipe.tonemap_type, 0, 1);
     

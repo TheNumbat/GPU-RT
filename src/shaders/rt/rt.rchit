@@ -5,6 +5,7 @@
 #include "rtcommon.glsl"
 
 layout(location = 0) rayPayloadInEXT hitPayload payload;
+layout(location = 1) rayPayloadEXT bool isShadowed;
 
 hitAttributeEXT vec3 attribs;
 
@@ -12,17 +13,75 @@ layout(binding = 1, std430) readonly buffer SceneDescs {
 	Scene_Obj objects[];
 };
 
-layout(binding = 2, scalar) readonly buffer Vertices { 
+layout(binding = 2, std430) readonly buffer SceneLights {
+	Scene_Light lights[];
+};
+
+layout(binding = 3, std430) readonly buffer Vertices { 
 	Vertex v[]; 
 } vertices[];
 
-layout(binding = 3) readonly buffer Indices {
+layout(binding = 4, std430) readonly buffer Indices {
 	uint i[];
 } indices[];
 
-layout(binding = 4) uniform sampler2D Textures[];
+layout(binding = 5) uniform sampler2D Textures[];
 
-layout(binding = 5) uniform accelerationStructureEXT TLAS;
+layout(binding = 6) uniform accelerationStructureEXT TLAS;
+
+vec3 light_sample(vec3 p) {
+	
+	uint l_idx = randu(payload.seed, 0, consts.n_lights);
+	uint o_idx = lights[nonuniformEXT(l_idx)].index;
+	uint n_tris = lights[nonuniformEXT(l_idx)].n_triangles;
+	uint t_idx = randu(payload.seed, 0, n_tris);
+
+	ivec3 ind = ivec3(indices[nonuniformEXT(o_idx)].i[3 * t_idx + 0],
+					  indices[nonuniformEXT(o_idx)].i[3 * t_idx + 1],
+					  indices[nonuniformEXT(o_idx)].i[3 * t_idx + 2]);
+
+	Vertex v0 = vertices[nonuniformEXT(o_idx)].v[ind.x];
+	Vertex v1 = vertices[nonuniformEXT(o_idx)].v[ind.y];
+	Vertex v2 = vertices[nonuniformEXT(o_idx)].v[ind.z];
+
+	vec3 bary = sampleTriangle(payload.seed);
+	vec3 point = v0.pos_tx.xyz * bary.x + v1.pos_tx.xyz * bary.y + v2.pos_tx.xyz * bary.z;
+	point = vec3(objects[nonuniformEXT(o_idx)].model * vec4(point, 1.0));
+
+	return normalize(point - p);
+}
+
+float light_pdf(vec3 p, vec3 d) {
+
+	float oacc = 0;
+	for(uint l = 0; l < consts.n_lights; l++) {
+		
+		float tacc = 0;
+		uint o_idx = lights[l].index;
+		uint n_tris = lights[l].n_triangles;
+
+		for(uint t = 0; t < n_tris; t++) {
+
+			ivec3 ind = ivec3(indices[o_idx].i[3 * t + 0],
+							  indices[o_idx].i[3 * t + 1],
+							  indices[o_idx].i[3 * t + 2]);
+
+			vec3 v0 = vertices[o_idx].v[ind.x].pos_tx.xyz;
+			vec3 v1 = vertices[o_idx].v[ind.y].pos_tx.xyz;
+			vec3 v2 = vertices[o_idx].v[ind.z].pos_tx.xyz;
+
+			v0 = vec3(objects[o_idx].model * vec4(v0, 1.0));
+			v1 = vec3(objects[o_idx].model * vec4(v1, 1.0));
+			v2 = vec3(objects[o_idx].model * vec4(v2, 1.0));
+
+			tacc += trianglePDF(p, d, v0, v1, v2);
+		}
+
+		oacc += tacc / float(n_tris);
+	}
+
+	return oacc / float(consts.n_lights);
+}
 
 void main() {
 
@@ -31,13 +90,13 @@ void main() {
 	vec3 hitPos, hitNormal, hitTangent;
 	vec2 hitTexCoord;
 	{
-		ivec3 ind = ivec3(indices[nonuniformEXT(objId)].i[3 * gl_PrimitiveID + 0],
-						  indices[nonuniformEXT(objId)].i[3 * gl_PrimitiveID + 1],
-						  indices[nonuniformEXT(objId)].i[3 * gl_PrimitiveID + 2]);
+		ivec3 ind = ivec3(indices[objId].i[3 * gl_PrimitiveID + 0],
+						  indices[objId].i[3 * gl_PrimitiveID + 1],
+						  indices[objId].i[3 * gl_PrimitiveID + 2]);
 
-		Vertex v0 = vertices[nonuniformEXT(objId)].v[ind.x];
-		Vertex v1 = vertices[nonuniformEXT(objId)].v[ind.y];
-		Vertex v2 = vertices[nonuniformEXT(objId)].v[ind.z];
+		Vertex v0 = vertices[objId].v[ind.x];
+		Vertex v1 = vertices[objId].v[ind.y];
+		Vertex v2 = vertices[objId].v[ind.z];
 
 		const vec3 barycentrics = vec3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
 
@@ -88,41 +147,103 @@ void main() {
 		}
 	}
 
-	{
-		vec3 d = gl_WorldRayDirectionEXT;
-		if(dot(d, hitNormal) > 0) hitNormal = -hitNormal;
+	vec3 d = gl_WorldRayDirectionEXT;
+	if(dot(d, hitNormal) > 0) hitNormal = -hitNormal;
 
-		vec3 T = hitTangent, N = hitNormal, B;
-		vec3 mapN = N;
-		if(use_tanspace && consts.use_normal_map == 1) {
-			B = cross(N, T);
-			N = normalize(mat3(T, B, N) * tanspaceNormal);
+	vec3 T = hitTangent, N = hitNormal, B;
+	if(use_tanspace && consts.use_normal_map == 1) {
+		B = cross(N, T);
+		N = normalize(mat3(T, B, N) * tanspaceNormal);
+	}
+	normalCoords(N, T, B);
+
+	if(consts.use_nee == 1 && consts.n_lights > 0) {
+
+		payload.emissive = payload.misWeight * emissive;
+		if(payload.is_direct) return;
+
+		payload.nextO = hitPos;
+
+		if(any(greaterThan(emissive, vec3(0)))) {
+			payload.depth = consts.max_depth;
+			return;
 		}
-		normalCoords(N, T, B);
-
-		vec3 scatter;
-
+		
 		if(metal_rough.y == 0) {
 			
-			scatter = reflect(d, N);
+			payload.nextD = reflect(d, N);
 			payload.nextWeight = albedo;
+			payload.misWeight = 1;
 
 		} else {
 
 			float exponent = 1 / metal_rough.y;
-			bp_sample(exponent, d, payload.seed, T, B, N, scatter);
+				
+			vec3 next_event = light_sample(hitPos);
+			float light_pdf_l = light_pdf(hitPos, next_event);
+
+			if(light_pdf_l != 0) {
+				float light_pdf_m = bp_pdf(exponent, d, next_event, N);
+				vec3 light_atten = bp_eval(albedo, light_pdf_m);
+				payload.shadowWeight = light_atten / light_pdf_l * powerHeuristic(light_pdf_l, light_pdf_m);
+				payload.shadowD = next_event;
+			}
+
+			vec3 scatter;
+			if(!bp_sample(exponent, d, payload.seed, T, B, N, scatter)) {
+				payload.depth = consts.max_depth;
+				return;
+			}
+
+			float brdf_pdf_m = bp_pdf(exponent, d, scatter, N);
+
+			if(brdf_pdf_m != 0) {
+				float brdf_pdf_l = light_pdf(hitPos, scatter);
+				vec3 brdf_atten = bp_eval(albedo, brdf_pdf_m);
+				payload.nextWeight = brdf_atten / brdf_pdf_m;
+				payload.misWeight = powerHeuristic(brdf_pdf_m, brdf_pdf_l);
+			} else {
+				payload.depth = consts.max_depth;
+				return;
+			}
+
+			payload.nextD = scatter;
+		}
+
+	} else {
+		
+		payload.nextO = hitPos;
+		payload.emissive = emissive;
+
+		if(any(greaterThan(emissive, vec3(0)))) {
+			payload.depth = consts.max_depth;
+			return;
+		}
+		
+		if(metal_rough.y == 0) {
+			
+			payload.nextD = reflect(d, N);
+			payload.nextWeight = albedo;
+
+		} else {
+
+			vec3 scatter;
+			float exponent = 1 / metal_rough.y;
+			if(!bp_sample(exponent, d, payload.seed, T, B, N, scatter)) {
+				payload.depth = consts.max_depth;
+				return;
+			}
 			
 			float pdf = bp_pdf(exponent, d, scatter, N);
-			vec3 atten = bp_eval(albedo, pdf) * abs(dot(scatter, mapN));
-			if(pdf > 0) {
+			vec3 atten = bp_eval(albedo, pdf);
+			if(pdf != 0) {
 				payload.nextWeight = atten / pdf;
 			} else {
 				payload.depth = consts.max_depth;
+				return;
 			}
-		}
 		
-		payload.emissive = emissive;
-		payload.nextO = hitPos;
-		payload.nextD = scatter;
+			payload.nextD = scatter;
+		}
 	}
 }

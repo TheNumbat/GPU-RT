@@ -42,6 +42,7 @@ struct RTPipe {
     Vec3 env = Vec3{1.0f};
     float env_scale = 0.1f;
     bool use_normal_map = false;
+    bool use_nee = false;
 
 private:
     struct alignas(16) Scene_Desc {
@@ -56,6 +57,10 @@ private:
         int normal_tex;
         unsigned int index;
     };
+    struct alignas(16) Scene_Light {
+        unsigned int index;
+        unsigned int n_triangles;
+    };
     struct RTPipe_Constants {
         Vec4 clearColor;
         Vec4 envlight;
@@ -63,12 +68,15 @@ private:
         int samples;
         int max_depth;
         int use_normal_map;
+        int use_nee;
+        int n_lights;
+        int n_objs;
     };
 
     std::vector<Drop<Buffer>> camera_uniforms;
     
     Drop<Buffer> sbt;
-    Drop<Buffer> desc_buf;
+    Drop<Buffer> desc_buf, light_buf;
 
     std::vector<VK::Drop<VK::Image>> textures;
     std::vector<VK::Drop<VK::ImageView>> texture_views;

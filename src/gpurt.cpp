@@ -273,6 +273,7 @@ void GPURT::UIsidebar() {
     change = change || ImGui::ColorEdit3("EnvLight", rt_pipe.env.data);
     change = change || ImGui::DragFloat("Intensity", &rt_pipe.env_scale, 0.1f, 0.0f, FLT_MAX);
     change = change || ImGui::Checkbox("Normal Maps", &rt_pipe.use_normal_map);
+    change = change || ImGui::Checkbox("NEE", &rt_pipe.use_nee);
     if(change) rt_pipe.reset_frame();
     
     ImGui::DragFloat("Exposure", &effect_pipe.exposure, 0.01f, 0.01f, 100.0f);

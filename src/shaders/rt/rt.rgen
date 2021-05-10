@@ -13,8 +13,33 @@ layout(binding = 0) uniform UniformBufferObject {
     mat4 V, P, iV, iP;
 } cam;
 
-layout(binding = 5) uniform accelerationStructureEXT topLevelAS;
-layout(binding = 6, rgba32f) uniform image2D image;
+layout(binding = 6) uniform accelerationStructureEXT TLAS;
+layout(binding = 7, rgba32f) uniform image2D image;
+
+vec3 directLight(vec3 o, vec3 d) {
+	
+    uint flags = gl_RayFlagsOpaqueEXT;
+
+	hitPayload old_payload = payload;
+	
+	payload.is_direct = true;
+    traceRayEXT(TLAS,  		 // acceleration structure
+                flags,       // rayFlags
+                0xFF,        // cullMask
+                0,           // sbtRecordOffset
+                0,           // sbtRecordStride
+                0,           // missIndex
+                o,           // ray origin
+                EPS,         // ray min range
+                d,           // ray direction
+                LARGE_DIST,  // ray max range
+                0            // payload (location = 1)
+    );
+
+	vec3 hit_emis = payload.emissive;
+	payload = old_payload;
+	return hit_emis;
+}
 
 void main() {
 
@@ -35,20 +60,25 @@ void main() {
         payload.nextO = o;
         payload.nextD = normalize(direction.xyz);
         payload.depth = 0;
+        payload.misWeight = 1;
 
         for(; payload.depth < consts.max_depth; payload.depth++) {
-            traceRayEXT(topLevelAS,     // acceleration structure
+            payload.is_direct = false;
+            payload.shadowWeight = vec3(0);
+            traceRayEXT(TLAS,           // acceleration structure
                 gl_RayFlagsOpaqueEXT,   // rayFlags
                 0xFF,                   // cullMask
                 0,                      // sbtRecordOffset
                 0,                      // sbtRecordStride
                 0,                      // missIndex
                 payload.nextO,          // ray origin
-                0.001,                  // ray min range
+                EPS,                    // ray min range
                 payload.nextD,          // ray direction
                 LARGE_DIST,             // ray max range
                 0                       // payload (location = 0)
             );
+            if(any(greaterThan(payload.shadowWeight, vec3(0))))
+                acc += directLight(payload.nextO, payload.shadowD) * payload.shadowWeight * throughput;
             acc += payload.emissive * throughput;
             throughput *= payload.nextWeight;
         }

@@ -4,8 +4,8 @@
 
 #include "rtcommon.glsl"
 
-layout(location = 1) rayPayloadInEXT bool shadowed;
+layout(location = 1) rayPayloadInEXT bool isShadowed;
 
 void main() {
-    shadowed = false;
+    isShadowed = false;
 }

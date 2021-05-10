@@ -43,6 +43,7 @@ struct RTPipe {
     float env_scale = 0.1f;
     bool use_normal_map = false;
     bool use_nee = false;
+    bool use_rr = true;
 
 private:
     struct alignas(16) Scene_Desc {
@@ -69,6 +70,7 @@ private:
         int max_depth;
         int use_normal_map;
         int use_nee;
+        int use_rr;
         int n_lights;
         int n_objs;
     };

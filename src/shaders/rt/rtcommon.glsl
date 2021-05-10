@@ -53,6 +53,7 @@ layout(push_constant) uniform Constants
 	int max_depth;
 	int use_normal_map;
 	int use_nee;
+	int use_rr;
 	int n_lights;
 	int n_objs;
 } consts;

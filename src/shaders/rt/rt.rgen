@@ -77,10 +77,19 @@ void main() {
                 LARGE_DIST,             // ray max range
                 0                       // payload (location = 0)
             );
-            if(any(greaterThan(payload.shadowWeight, vec3(0))))
+
+            if(consts.use_nee == 1 && any(greaterThan(payload.shadowWeight, vec3(0))))
                 acc += directLight(payload.nextO, payload.shadowD) * payload.shadowWeight * throughput;
+
             acc += payload.emissive * throughput;
             throughput *= payload.nextWeight;
+
+            if(consts.use_rr == 1) {
+                float pcont = min(max(throughput.x, max(throughput.y, throughput.z)) + 0.001, 0.95);
+                if(randf(payload.seed) >= pcont)
+                    break;
+                throughput /= pcont;
+            }
         }
     }
 

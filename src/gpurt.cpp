@@ -275,6 +275,7 @@ void GPURT::UIsidebar() {
     change = change || ImGui::Checkbox("Normal Maps", &rt_pipe.use_normal_map);
     change = change || ImGui::Checkbox("NEE", &rt_pipe.use_nee);
     change = change || ImGui::Checkbox("RR", &rt_pipe.use_rr);
+    change = change || ImGui::Checkbox("D-ONLY", &rt_pipe.use_d_only);
     if(change) rt_pipe.reset_frame();
     
     ImGui::DragFloat("Exposure", &effect_pipe.exposure, 0.01f, 0.01f, 100.0f);

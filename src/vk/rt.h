@@ -40,10 +40,11 @@ struct RTPipe {
     int max_depth = 8;
     Vec3 clear = Vec3{0.3f};
     Vec3 env = Vec3{1.0f};
-    float env_scale = 0.1f;
+    float env_scale = 0.0f;
     bool use_normal_map = false;
     bool use_nee = false;
     bool use_rr = true;
+    bool use_d_only = false;
 
 private:
     struct alignas(16) Scene_Desc {
@@ -58,7 +59,7 @@ private:
         int normal_tex;
         unsigned int index;
     };
-    struct alignas(16) Scene_Light {
+    struct Scene_Light {
         unsigned int index;
         unsigned int n_triangles;
     };
@@ -71,6 +72,7 @@ private:
         int use_normal_map;
         int use_nee;
         int use_rr;
+        int use_d_only;
         int n_lights;
         int n_objs;
     };

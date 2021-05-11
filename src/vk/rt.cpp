@@ -178,6 +178,7 @@ bool RTPipe::trace(const Camera& cam, VkCommandBuffer& cmds, VkExtent2D ext) {
     consts.max_depth = max_depth;
     consts.use_normal_map = use_normal_map;
     consts.use_nee = use_nee;
+    consts.use_d_only = use_d_only;
     consts.use_rr = use_rr;
     consts.frame++;
 

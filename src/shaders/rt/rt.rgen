@@ -23,6 +23,7 @@ vec3 directLight(vec3 o, vec3 d) {
 	hitPayload old_payload = payload;
 	
 	payload.is_direct = true;
+    payload.misWeight = 1;
     traceRayEXT(TLAS,  		 // acceleration structure
                 flags,       // rayFlags
                 0xFF,        // cullMask
@@ -77,7 +78,7 @@ void main() {
                 LARGE_DIST,             // ray max range
                 0                       // payload (location = 0)
             );
-
+            
             if(consts.use_nee == 1 && any(greaterThan(payload.shadowWeight, vec3(0))))
                 acc += directLight(payload.nextO, payload.shadowD) * payload.shadowWeight * throughput;
 

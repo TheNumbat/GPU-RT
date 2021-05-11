@@ -54,6 +54,7 @@ layout(push_constant) uniform Constants
 	int use_normal_map;
 	int use_nee;
 	int use_rr;
+	int use_d_only;
 	int n_lights;
 	int n_objs;
 } consts;

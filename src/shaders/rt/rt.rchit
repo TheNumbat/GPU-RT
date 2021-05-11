@@ -32,21 +32,21 @@ layout(binding = 6) uniform accelerationStructureEXT TLAS;
 vec3 light_sample(vec3 p) {
 	
 	uint l_idx = randu(payload.seed, 0, consts.n_lights);
-	uint o_idx = lights[nonuniformEXT(l_idx)].index;
-	uint n_tris = lights[nonuniformEXT(l_idx)].n_triangles;
+	uint o_idx = lights[l_idx].index;
+	uint n_tris = lights[l_idx].n_triangles;
 	uint t_idx = randu(payload.seed, 0, n_tris);
 
-	ivec3 ind = ivec3(indices[nonuniformEXT(o_idx)].i[3 * t_idx + 0],
-					  indices[nonuniformEXT(o_idx)].i[3 * t_idx + 1],
-					  indices[nonuniformEXT(o_idx)].i[3 * t_idx + 2]);
+	ivec3 ind = ivec3(indices[o_idx].i[3 * t_idx + 0],
+					  indices[o_idx].i[3 * t_idx + 1],
+					  indices[o_idx].i[3 * t_idx + 2]);
 
-	Vertex v0 = vertices[nonuniformEXT(o_idx)].v[ind.x];
-	Vertex v1 = vertices[nonuniformEXT(o_idx)].v[ind.y];
-	Vertex v2 = vertices[nonuniformEXT(o_idx)].v[ind.z];
+	Vertex v0 = vertices[o_idx].v[ind.x];
+	Vertex v1 = vertices[o_idx].v[ind.y];
+	Vertex v2 = vertices[o_idx].v[ind.z];
 
 	vec3 bary = sampleTriangle(payload.seed);
 	vec3 point = v0.pos_tx.xyz * bary.x + v1.pos_tx.xyz * bary.y + v2.pos_tx.xyz * bary.z;
-	point = vec3(objects[nonuniformEXT(o_idx)].model * vec4(point, 1.0));
+	point = vec3(objects[o_idx].model * vec4(point, 1.0));
 
 	return normalize(point - p);
 }
@@ -169,7 +169,7 @@ void main() {
 			return;
 		}
 		
-		if(metal_rough.y == 0) {
+		if(metal_rough.y == 0 && consts.use_d_only == 0) {
 			
 			payload.nextD = reflect(d, N);
 			payload.nextWeight = albedo;
@@ -185,7 +185,8 @@ void main() {
 			if(light_pdf_l != 0) {
 				float light_pdf_m = bp_pdf(exponent, d, next_event, N);
 				vec3 light_atten = bp_eval(albedo, light_pdf_m);
-				payload.shadowWeight = light_atten / light_pdf_l * powerHeuristic(light_pdf_l, light_pdf_m);
+				float mis = consts.use_d_only == 1 ? 1 : powerHeuristic(light_pdf_l, light_pdf_m);
+				payload.shadowWeight = light_atten / light_pdf_l * mis;
 				payload.shadowD = next_event;
 			}
 
@@ -201,7 +202,7 @@ void main() {
 				float brdf_pdf_l = light_pdf(hitPos, scatter);
 				vec3 brdf_atten = bp_eval(albedo, brdf_pdf_m);
 				payload.nextWeight = brdf_atten / brdf_pdf_m;
-				payload.misWeight = powerHeuristic(brdf_pdf_m, brdf_pdf_l);
+				payload.misWeight = consts.use_d_only == 1 ? 0 : powerHeuristic(brdf_pdf_m, brdf_pdf_l);
 			} else {
 				payload.depth = consts.max_depth;
 				return;

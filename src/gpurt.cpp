@@ -280,7 +280,7 @@ void GPURT::UIsidebar() {
     
     ImGui::DragFloat("Exposure", &effect_pipe.exposure, 0.01f, 0.01f, 100.0f);
     ImGui::DragFloat("Gamma", &effect_pipe.gamma, 0.01f, 0.01f, 5.0f);
-    ImGui::SliderInt("Tonemap", &effect_pipe.tonemap_type, 0, 1);
+    ImGui::SliderInt("Tonemap", &effect_pipe.tonemap_type, 0, 2);
     
     if(ImGui::DragFloat("Scale", &scene.scale, 0.01f, 0.01f, 10.0f)) {
         rebuild_tlas = true;

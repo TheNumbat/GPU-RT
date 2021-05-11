@@ -43,5 +43,7 @@ void main() {
         outColor = tonemapUT(t);
     } else if(consts.type == 1) {
         outColor = tonemapExp(t);
+    } else if(consts.type == 2) {
+        outColor = t;
     }
 }

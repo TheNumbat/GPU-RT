@@ -3,6 +3,11 @@
 
 #include <algorithm>
 #include <chrono>
+#include <random>
+#include <iterator>
+#include <iostream>
+#include <vector>
+
 #include <imgui/imgui.h>
 #include <nfd/nfd.h>
 #include <util/image.h>
@@ -151,8 +156,8 @@ GPURT::GPURT(Window& window, std::string scene_file) : window(window), cam(windo
     const VK::Mesh& obj = scene.get(1).mesh();
     bvh_pipe.build(obj, 16);
 
+    std::cout << "file: " << scene_file << std::endl;
     if(scene_file == "bunny.obj") {
-        std::cout << "Testing file: " << scene_file << std::endl;
         // run_tests();
     }
     std::cout << "Benchmarking random coherent: " << std::endl;
@@ -208,7 +213,11 @@ void GPURT::benchmark_rng() {
 
     std::vector<Vec4> queries = gen_points(QUERY_MAX, bvh_pipe.box());
     std::vector<std::pair<Vec4,Vec4>> rqueries = gen_rays(10 * QUERY_MAX, bvh_pipe.box());
-
+    
+    // std::random_device rd;
+    // std::mt19937 g(rd());
+    // std::shuffle(queries.begin(), queries.end(), g);
+    
     time_cpqs(queries, VK::BVH_Type::threaded);
     time_cpqs(queries, VK::BVH_Type::stack);
     time_cpqs(queries, VK::BVH_Type::stackless);

@@ -96,7 +96,7 @@ void traverse_ray_sort(vec3 o, vec3 d, inout vec3 first_hit, inout float best_di
             }
         }
 
-        for(uint i = 0; i < WIDTH; i++) {
+        for(int i = WIDTH - 1; i >= 0; i--) {
             if(children[i] < 0) continue;
             if(children_d[i] == INF) continue;
             stack[stack_n++] = children[i];
@@ -166,7 +166,7 @@ void traverse_cpq_sort(vec3 q, inout vec3 best_point, inout float best_dist) {
             }
         }
 
-        for(uint i = 0; i < WIDTH; i++) {
+        for(int i = WIDTH - 1; i >= 0; i--) {
             if(children[i] < 0) continue;
             if(children_d[i] == INF) continue;
             stack[stack_n++] = children[i];
@@ -209,11 +209,11 @@ void traverse_ray_max(vec3 o, vec3 d, inout vec3 first_hit, inout float best_dis
             }
         }
 
-        if(closest < WIDTH)
-            stack[stack_n++] = children[closest];
         for(uint i = 0; i < WIDTH; i++)
             if(i != closest && children[i] >= 0)
                 stack[stack_n++] = children[i];
+        if(closest < WIDTH)
+            stack[stack_n++] = children[closest];
 	}
 }
 
@@ -253,11 +253,11 @@ void traverse_cpq_max(vec3 q, inout vec3 best_point, inout float best_dist) {
             }
         }
 
-        if(closest < WIDTH)
-            stack[stack_n++] = children[closest];
         for(uint i = 0; i < WIDTH; i++)
             if(i != closest && children[i] >= 0)
                 stack[stack_n++] = children[i];
+        if(closest < WIDTH)
+            stack[stack_n++] = children[closest];
 	}
 }
 

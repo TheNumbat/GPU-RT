@@ -46,6 +46,36 @@ Object& Scene::get(unsigned int id) {
     return entry->second;
 }
 
+VK::Mesh Scene::everything_mesh() const {
+    
+    std::vector<std::vector<VK::Mesh::Vertex>> vertices;
+    std::vector<std::vector<VK::Mesh::Index>> indices;
+
+    for_objs([&](const Object& obj) {
+        vertices.push_back(obj.mesh().verts());
+        indices.push_back(obj.mesh().inds());
+    });
+
+    std::vector<size_t> sizes(indices.size());
+    for(size_t i = 1; i < sizes.size(); i++) {
+        sizes[i] = sizes[i-1] + vertices[i-1].size();
+    }
+    
+    std::vector<VK::Mesh::Vertex> e_vertices;
+    std::vector<VK::Mesh::Index> e_indices;
+
+    for(auto&& v : vertices) e_vertices.insert(e_vertices.end(), v.begin(), v.end());
+    
+    for(size_t i = 0; i < sizes.size(); i++) {
+        for(auto& ind : indices[i]) {
+            ind += sizes[i];
+        }
+        e_indices.insert(e_indices.end(), indices[i].begin(), indices[i].end());
+    }
+
+    return VK::Mesh(std::move(e_vertices), std::move(e_indices));
+}
+
 //////////////////////////////////////////////////////////////
 // Scene importer/exporter
 //////////////////////////////////////////////////////////////

@@ -41,6 +41,8 @@ public:
     unsigned int reserve_id();
     unsigned int used_ids();
 
+    VK::Mesh everything_mesh() const;
+
     Object& get(unsigned int id);
 
 private:

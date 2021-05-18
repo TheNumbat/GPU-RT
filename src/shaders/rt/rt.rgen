@@ -5,10 +5,8 @@
 
 #include "rtcommon.glsl"
 
-// ray info
-layout(location = 0) rayPayloadEXT hitPayload payload;
+layout(location = 0) rayPayloadEXT CH_Payload payload;
 
-// IO
 layout(binding = 0) uniform UniformBufferObject {
     mat4 V, P, iV, iP;
 } cam;
@@ -20,7 +18,7 @@ vec3 directLight(vec3 o, vec3 d) {
 	
     uint flags = gl_RayFlagsOpaqueEXT;
 
-	hitPayload old_payload = payload;
+	CH_Payload old_payload = payload;
 	
 	payload.is_direct = true;
     payload.misWeight = 1;
@@ -50,7 +48,13 @@ void main() {
 
     for(int s = 0; s < consts.samples; s++) {
         
-        const vec2 jitter = consts.frame == 0 ? vec2(0.5) : vec2(randf(payload.seed), randf(payload.seed));
+        vec2 jitter;
+        if(consts.qmc == 0) {
+            jitter = consts.frame == 0 ? vec2(0.5) : vec2(randf(payload.seed), randf(payload.seed));
+        } else {
+            jitter = hammersley(s * consts.frame, consts.samples * consts.max_frame);
+        }
+
         const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + jitter;
         const vec2 inUV = pixelCenter / vec2(gl_LaunchSizeEXT.xy);
         vec4 target = cam.iP * vec4(inUV * 2.0 - 1.0, 0, 1);

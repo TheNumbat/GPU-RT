@@ -122,7 +122,6 @@ add_shader(fcpw-gpu "mesh.frag")
 
 add_shader(fcpw-gpu "rt/rt.rchit")
 add_shader(fcpw-gpu "rt/rt.rmiss")
-add_shader(fcpw-gpu "rt/shadow.rmiss")
 add_shader(fcpw-gpu "rt/rt.rgen")
 
 add_shader(fcpw-gpu "rquery.rchit")

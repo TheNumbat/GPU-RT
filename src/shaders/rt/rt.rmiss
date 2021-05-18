@@ -4,7 +4,7 @@
 
 #include "rtcommon.glsl"
 
-layout(location = 0) rayPayloadInEXT hitPayload payload;
+layout(location = 0) rayPayloadInEXT CH_Payload payload;
 
 void main() {
     

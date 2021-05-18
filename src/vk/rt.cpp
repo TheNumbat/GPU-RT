@@ -180,6 +180,8 @@ bool RTPipe::trace(const Camera& cam, VkCommandBuffer& cmds, VkExtent2D ext) {
     consts.use_nee = use_nee;
     consts.use_d_only = use_d_only;
     consts.use_rr = use_rr;
+    consts.max_frame = max_frames;
+    consts.qmc = use_qmc;
     consts.frame++;
 
     vkCmdBindPipeline(cmds, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipe->pipe);
@@ -198,7 +200,7 @@ bool RTPipe::trace(const Camera& cam, VkCommandBuffer& cmds, VkExtent2D ext) {
     using Stride = VkStridedDeviceAddressRegionKHR;
     std::array<Stride, 4> addrs{Stride{sbt_addr + 0u * groupSize, groupStride, groupSize}, // raygen
                                 Stride{sbt_addr + 1u * groupSize, groupStride, groupSize}, // miss
-                                Stride{sbt_addr + 3u * groupSize, groupStride, groupSize}, // hit
+                                Stride{sbt_addr + 2u * groupSize, groupStride, groupSize}, // hit
                                 Stride{0u, 0u, 0u}};
 
     vk().rtx.vkCmdTraceRaysKHR(cmds, &addrs[0], &addrs[1], &addrs[2], &addrs[3], ext.width,
@@ -212,7 +214,7 @@ void RTPipe::reset_frame() {
 
 void RTPipe::create_sbt() {
 
-    unsigned int shader_count = 4;
+    unsigned int shader_count = 3;
     unsigned int groupHandleSize = vk().rtx.properties.shaderGroupHandleSize;
     unsigned int groupSizeAligned =
         align_up(groupHandleSize, vk().rtx.properties.shaderGroupBaseAlignment);
@@ -266,10 +268,9 @@ void RTPipe::create_pipe() {
 
     Shader chit(File::read("shaders/rt/rt.rchit.spv").value());
     Shader miss(File::read("shaders/rt/rt.rmiss.spv").value());
-    Shader shadow(File::read("shaders/rt/shadow.rmiss.spv").value());
     Shader gen(File::read("shaders/rt/rt.rgen.spv").value());
 
-    VkRayTracingShaderGroupCreateInfoKHR groups[4] = {};
+    VkRayTracingShaderGroupCreateInfoKHR groups[3] = {};
 
     groups[0].sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
     groups[0].type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
@@ -286,20 +287,13 @@ void RTPipe::create_pipe() {
     groups[1].generalShader = 1;
 
     groups[2].sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
-    groups[2].type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+    groups[2].type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
     groups[2].intersectionShader = VK_SHADER_UNUSED_KHR;
     groups[2].anyHitShader = VK_SHADER_UNUSED_KHR;
-    groups[2].closestHitShader = VK_SHADER_UNUSED_KHR;
-    groups[2].generalShader = 2;
+    groups[2].closestHitShader = 2;
+    groups[2].generalShader = VK_SHADER_UNUSED_KHR;
 
-    groups[3].sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
-    groups[3].type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
-    groups[3].intersectionShader = VK_SHADER_UNUSED_KHR;
-    groups[3].anyHitShader = VK_SHADER_UNUSED_KHR;
-    groups[3].closestHitShader = 3;
-    groups[3].generalShader = VK_SHADER_UNUSED_KHR;
-
-    VkPipelineShaderStageCreateInfo stage_info[4] = {};
+    VkPipelineShaderStageCreateInfo stage_info[3] = {};
 
     stage_info[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stage_info[0].stage = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
@@ -312,14 +306,9 @@ void RTPipe::create_pipe() {
     stage_info[1].pName = "main";
 
     stage_info[2].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    stage_info[2].stage = VK_SHADER_STAGE_MISS_BIT_KHR;
-    stage_info[2].module = shadow.shader;
+    stage_info[2].stage = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+    stage_info[2].module = chit.shader;
     stage_info[2].pName = "main";
-
-    stage_info[3].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    stage_info[3].stage = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
-    stage_info[3].module = chit.shader;
-    stage_info[3].pName = "main";
 
     VkPushConstantRange pushes = {};
     pushes.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR |
@@ -338,14 +327,12 @@ void RTPipe::create_pipe() {
 
     VkRayTracingPipelineCreateInfoKHR rayPipelineInfo = {};
     rayPipelineInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
-    rayPipelineInfo.stageCount = 4;
+    rayPipelineInfo.stageCount = 3;
     rayPipelineInfo.pStages = stage_info;
-    rayPipelineInfo.groupCount = 4;
+    rayPipelineInfo.groupCount = 3;
     rayPipelineInfo.pGroups = groups;
-    rayPipelineInfo.maxPipelineRayRecursionDepth = 2;
+    rayPipelineInfo.maxPipelineRayRecursionDepth = 1;
     rayPipelineInfo.layout = pipe->p_layout;
-    
-    assert(vk().rtx.properties.maxRayRecursionDepth >= 2);
 
     VK_CHECK(vk().rtx.vkCreateRayTracingPipelinesKHR(vk().device(), nullptr, nullptr, 1,
                                                      &rayPipelineInfo, nullptr, &pipe->pipe));

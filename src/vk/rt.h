@@ -45,6 +45,7 @@ struct RTPipe {
     bool use_nee = false;
     bool use_rr = true;
     bool use_d_only = false;
+    bool use_qmc = false;
 
 private:
     struct alignas(16) Scene_Desc {
@@ -68,6 +69,8 @@ private:
         Vec4 envlight;
         int frame = -1;
         int samples;
+        int max_frame;
+        int qmc;
         int max_depth;
         int use_normal_map;
         int use_nee;

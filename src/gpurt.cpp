@@ -265,27 +265,36 @@ void GPURT::UIsidebar() {
     ImGui::Separator();
 
     bool change = false;
-    change = change || ImGui::Checkbox("Use RTX", &use_rt);
-    change = change || ImGui::SliderInt("Max Frames", &rt_pipe.max_frames, 1, 2048);
-    change = change || ImGui::SliderInt("Samples", &rt_pipe.samples_per_frame, 1, 128);
-    change = change || ImGui::SliderInt("Depth", &rt_pipe.max_depth, 1, 32);
+    
     change = change || ImGui::ColorEdit3("ClearCol", rt_pipe.clear.data);
     change = change || ImGui::ColorEdit3("EnvLight", rt_pipe.env.data);
     change = change || ImGui::DragFloat("Intensity", &rt_pipe.env_scale, 0.1f, 0.0f, FLT_MAX);
+    if(ImGui::DragFloat("Scale", &scene.scale, 0.01f, 0.01f, 10.0f)) {
+        rebuild_tlas = true;
+        change = true;
+    }
     change = change || ImGui::Checkbox("Normal Maps", &rt_pipe.use_normal_map);
-    change = change || ImGui::Checkbox("NEE", &rt_pipe.use_nee);
-    change = change || ImGui::Checkbox("RR", &rt_pipe.use_rr);
-    change = change || ImGui::Checkbox("L only", &rt_pipe.use_d_only);
+
+    ImGui::Separator();
+
+    change = change || ImGui::SliderInt("Max Frames", &rt_pipe.max_frames, 1, 2048);
+    change = change || ImGui::SliderInt("Samples", &rt_pipe.samples_per_frame, 1, 128);
+    change = change || ImGui::SliderInt("Depth", &rt_pipe.max_depth, 1, 32);
+    change = change || ImGui::Checkbox("Roulette", &rt_pipe.use_rr);
     change = change || ImGui::Checkbox("QMC", &rt_pipe.use_qmc);
+
+    const char* integrators[] = {"Direct", "Material", "MIS"};
+    const char* brdfs[] = {"BlinnPhong", "GGX"};
+    change = change || ImGui::Combo("Integrator", &rt_pipe.integrator, integrators, 3);
+    change = change || ImGui::Combo("BRDF", &rt_pipe.brdf, brdfs, 2);
+    
     if(change) rt_pipe.reset_frame();
     
+    ImGui::Separator();
+
     ImGui::DragFloat("Exposure", &effect_pipe.exposure, 0.01f, 0.01f, 100.0f);
     ImGui::DragFloat("Gamma", &effect_pipe.gamma, 0.01f, 0.01f, 5.0f);
     ImGui::SliderInt("Tonemap", &effect_pipe.tonemap_type, 0, 2);
-    
-    if(ImGui::DragFloat("Scale", &scene.scale, 0.01f, 0.01f, 10.0f)) {
-        rebuild_tlas = true;
-    }
 
     ImGui::Separator();
 

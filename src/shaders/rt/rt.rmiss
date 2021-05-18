@@ -4,14 +4,8 @@
 
 #include "rtcommon.glsl"
 
-layout(location = 0) rayPayloadInEXT CH_Payload payload;
+layout(location = 0) rayPayloadInEXT Ray_Payload payload;
 
 void main() {
-    
-    if(payload.depth == 0)
-        payload.emissive = consts.clearColor.xyz;
-    else
-        payload.emissive = consts.envlight.xyz;
-
-    payload.depth = consts.max_depth;
+    payload.hit = false;
 }

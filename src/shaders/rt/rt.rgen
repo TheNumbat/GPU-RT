@@ -5,97 +5,379 @@
 
 #include "rtcommon.glsl"
 
-layout(location = 0) rayPayloadEXT CH_Payload payload;
+// Ray Data //////////////////////////////////////////
+
+layout(location = 0) rayPayloadEXT Ray_Payload payload;
+
+// Scene Data //////////////////////////////////////////
 
 layout(binding = 0) uniform UniformBufferObject {
     mat4 V, P, iV, iP;
 } cam;
 
+layout(binding = 1, std430) readonly buffer SceneDescs {
+	Scene_Obj objects[];
+};
+
+layout(binding = 2, std430) readonly buffer SceneLights {
+	Scene_Light lights[];
+};
+
+layout(binding = 3, std430) readonly buffer Vertices { 
+	Vertex v[]; 
+} vertices[];
+
+layout(binding = 4, std430) readonly buffer Indices {
+	uint i[];
+} indices[];
+
+layout(binding = 5) uniform sampler2D Textures[];
+
 layout(binding = 6) uniform accelerationStructureEXT TLAS;
+
 layout(binding = 7, rgba32f) uniform image2D image;
 
-vec3 directLight(vec3 o, vec3 d) {
-	
-    uint flags = gl_RayFlagsOpaqueEXT;
+////////////////////////////////////////////
 
-	CH_Payload old_payload = payload;
+uint seed;
+
+HitInfo hit_info() {
+
+	const uint objId = objects[payload.obj_id].index;
+    const mat4 modelIT = objects[payload.obj_id].modelIT;
+    const mat4 model = objects[payload.obj_id].model;
+    const vec3 bary = payload.barycentrics;
+
+	HitInfo hit;
+	ivec3 ind = ivec3(indices[objId].i[3 * payload.prim_id + 0],
+					  indices[objId].i[3 * payload.prim_id + 1],
+					  indices[objId].i[3 * payload.prim_id + 2]);
+
+	Vertex v0 = vertices[objId].v[ind.x];
+	Vertex v1 = vertices[objId].v[ind.y];
+	Vertex v2 = vertices[objId].v[ind.z];
+
+	hit.normal = v0.norm_ty.xyz * bary.x + v1.norm_ty.xyz * bary.y + v2.norm_ty.xyz * bary.z;
+	hit.normal = normalize(vec3(modelIT * vec4(hit.normal, 0.0)));
+
+	vec3 t0 = v0.tangent.xyz * v0.tangent.w;
+	vec3 t1 = v1.tangent.xyz * v1.tangent.w;
+	vec3 t2 = v2.tangent.xyz * v2.tangent.w;
+	hit.tangent = t0 * bary.x + t1 * bary.y + t2 * bary.z;
+	hit.tangent = normalize(vec3(modelIT * vec4(hit.tangent, 0.0)));
+
+	hit.pos = v0.pos_tx.xyz * bary.x + v1.pos_tx.xyz * bary.y + v2.pos_tx.xyz * bary.z;
+	hit.pos = vec3(model * vec4(hit.pos, 1.0));
+
+	vec2 tc0 = vec2(v0.pos_tx.w, v0.norm_ty.w);
+	vec2 tc1 = vec2(v1.pos_tx.w, v1.norm_ty.w);
+	vec2 tc2 = vec2(v2.pos_tx.w, v2.norm_ty.w);
+	hit.texcoord = tc0 * bary.x + tc1 * bary.y + tc2 * bary.z;
+	return hit;
+}
+
+MatInfo mat_info(HitInfo hit) {
+
+	MatInfo mat;
 	
-	payload.is_direct = true;
-    payload.misWeight = 1;
-    traceRayEXT(TLAS,  		 // acceleration structure
-                flags,       // rayFlags
-                0xFF,        // cullMask
-                0,           // sbtRecordOffset
-                0,           // sbtRecordStride
-                0,           // missIndex
-                o,           // ray origin
-                EPS,         // ray min range
-                d,           // ray direction
-                LARGE_DIST,  // ray max range
-                0            // payload (location = 1)
+	int albedoIdx = objects[payload.obj_id].albedo_tex;
+	mat.albedo = objects[payload.obj_id].albedo.xyz;
+	if(albedoIdx >= 0) {
+		mat.albedo = texture(Textures[albedoIdx], hit.texcoord).xyz;
+	}
+
+	int emissiveIdx = objects[payload.obj_id].emissive_tex;
+	mat.emissive = objects[payload.obj_id].emissive.xyz;
+	if(emissiveIdx >= 0) {
+		mat.emissive = texture(Textures[emissiveIdx], hit.texcoord).xyz;
+	}
+
+	int mrIdx = objects[payload.obj_id].metal_rough_tex;
+	mat.roughness = objects[payload.obj_id].metal_rough.y;
+	if(mrIdx >= 0) {
+		mat.roughness = texture(Textures[mrIdx], hit.texcoord).y;
+	}
+
+	int nIdx = objects[payload.obj_id].normal_tex;
+	mat.use_tanspace = nIdx >= 0;
+	if(mat.use_tanspace) {
+		mat.tanspaceNormal = texture(Textures[nIdx], hit.texcoord).xyz * 2.0 - 1.0;
+	}
+	return mat;
+}
+
+ShadeInfo shade_info(TraceInfo trace, HitInfo hit, MatInfo mat) {
+
+	ShadeInfo shade;
+
+	shade.wo = trace.d;
+	if(dot(shade.wo, hit.normal) > 0) hit.normal = -hit.normal;
+
+	shade.T = hit.tangent;
+	shade.N = hit.normal;
+
+	if(mat.use_tanspace && consts.use_normal_map == 1) {
+		shade.B = cross(shade.N, shade.T);
+		shade.N = normalize(mat3(shade.T, shade.B, shade.N) * mat.tanspaceNormal);
+	}
+
+	make_tanspace(shade.N, shade.T, shade.B);
+	return shade;
+}
+
+vec3 light_sample(vec3 p) {
+	
+	uint l_idx = randu(seed, 0, consts.n_lights);
+	uint o_idx = lights[l_idx].index;
+	uint n_tris = lights[l_idx].n_triangles;
+	uint t_idx = randu(seed, 0, n_tris);
+
+	ivec3 ind = ivec3(indices[o_idx].i[3 * t_idx + 0],
+					  indices[o_idx].i[3 * t_idx + 1],
+					  indices[o_idx].i[3 * t_idx + 2]);
+
+	Vertex v0 = vertices[o_idx].v[ind.x];
+	Vertex v1 = vertices[o_idx].v[ind.y];
+	Vertex v2 = vertices[o_idx].v[ind.z];
+
+	vec3 bary = triangle_sample(seed);
+	vec3 point = v0.pos_tx.xyz * bary.x + v1.pos_tx.xyz * bary.y + v2.pos_tx.xyz * bary.z;
+	point = vec3(objects[o_idx].model * vec4(point, 1.0));
+
+	return normalize(point - p);
+}
+
+float light_pdf(vec3 p, vec3 d) {
+
+	float oacc = 0;
+	for(uint l = 0; l < consts.n_lights; l++) {
+		
+		float tacc = 0;
+		uint o_idx = lights[l].index;
+		uint n_tris = lights[l].n_triangles;
+
+		for(uint t = 0; t < n_tris; t++) {
+
+			ivec3 ind = ivec3(indices[o_idx].i[3 * t + 0],
+							  indices[o_idx].i[3 * t + 1],
+							  indices[o_idx].i[3 * t + 2]);
+
+			vec3 v0 = vertices[o_idx].v[ind.x].pos_tx.xyz;
+			vec3 v1 = vertices[o_idx].v[ind.y].pos_tx.xyz;
+			vec3 v2 = vertices[o_idx].v[ind.z].pos_tx.xyz;
+
+			v0 = vec3(objects[o_idx].model * vec4(v0, 1.0));
+			v1 = vec3(objects[o_idx].model * vec4(v1, 1.0));
+			v2 = vec3(objects[o_idx].model * vec4(v2, 1.0));
+
+			tacc += triangle_pdf(p, d, v0, v1, v2);
+		}
+
+		oacc += tacc / float(n_tris);
+	}
+
+	return oacc / float(consts.n_lights);
+}
+
+void trace_ray(vec3 o, vec3 d) {
+    traceRayEXT(TLAS,           // acceleration structure
+        gl_RayFlagsOpaqueEXT,   // rayFlags
+        0xFF,                   // cullMask
+        0,                      // sbtRecordOffset
+        0,                      // sbtRecordStride
+        0,                      // missIndex
+        o,                      // ray origin
+        EPS,                    // ray min range
+        d,                      // ray direction
+        LARGE_DIST,             // ray max range
+        0                       // payload (location = 0)
     );
+}
 
-	vec3 hit_emis = payload.emissive;
-	payload = old_payload;
-	return hit_emis;
+vec3 direct_light(vec3 o, vec3 d) {
+    trace_ray(o, d);
+    HitInfo hit = hit_info();
+    MatInfo mat = mat_info(hit);
+    return mat.emissive;
+}
+
+void integrate_direct(inout TraceInfo trace, HitInfo hit, MatInfo mat, ShadeInfo shade) {
+
+	if(any(greaterThan(mat.emissive, vec3(0)))) {
+	    trace.acc += mat.emissive;
+		trace.depth = consts.max_depth;
+		return;
+	}
+    
+    trace.depth = consts.max_depth;
+
+	if(mat.roughness != 0) {
+		
+		vec3 wi_light = light_sample(hit.pos);
+		
+		float light_pdf = light_pdf(hit.pos, wi_light);
+		vec3 light_atten = MAT_eval(mat, shade, wi_light);
+
+        if(light_pdf != 0)
+            trace.acc += light_atten / light_pdf * direct_light(hit.pos, wi_light);
+	}
+}
+
+void integrate_mis(inout TraceInfo trace, HitInfo hit, MatInfo mat, ShadeInfo shade) {
+
+	if(any(greaterThan(mat.emissive, vec3(0)))) {
+	    trace.acc += trace.throughput * trace.mis * mat.emissive;
+		trace.depth = consts.max_depth;
+		return;
+	}
+
+	trace.o = hit.pos;
+	
+	if(mat.roughness == 0) {
+
+		trace.d = reflect(shade.wo, shade.N);
+		trace.throughput *= mat.albedo;
+		trace.mis = 1;
+
+	} else {
+		
+		vec3 wi_light = light_sample(hit.pos);
+		float light_pdf_l = light_pdf(hit.pos, wi_light);
+
+		if(light_pdf_l != 0) {
+			
+            float light_pdf_m = MAT_pdf(mat, shade, wi_light);
+			vec3 light_atten = MAT_eval(mat, shade, wi_light);
+            vec3 weight = light_atten / light_pdf_l * power_heuristic(light_pdf_l, light_pdf_m);
+			
+            trace.acc += trace.throughput * weight * direct_light(hit.pos, wi_light);
+		}
+
+		vec3 wi_brdf;
+		if(!MAT_sample(seed, mat, shade, wi_brdf)) {
+			trace.depth = consts.max_depth;
+			return;
+		}
+
+		float brdf_pdf_m = MAT_pdf(mat, shade, wi_brdf);
+
+		if(brdf_pdf_m != 0) {
+			float brdf_pdf_l = light_pdf(hit.pos, wi_brdf);
+			vec3 brdf_atten = MAT_eval(mat, shade, wi_brdf);
+			trace.throughput *= brdf_atten / brdf_pdf_m;
+			trace.mis = power_heuristic(brdf_pdf_m, brdf_pdf_l);
+		} else {
+			trace.depth = consts.max_depth;
+			return;
+		}
+
+		trace.d = wi_brdf;
+	}
+}
+
+void integrate_mats(inout TraceInfo trace, HitInfo hit, MatInfo mat, ShadeInfo shade) {
+
+	if(any(greaterThan(mat.emissive, vec3(0)))) {
+        trace.acc += mat.emissive * trace.throughput;
+		trace.depth = consts.max_depth;
+		return;
+	}
+
+	trace.o = hit.pos;
+	
+	if(mat.roughness == 0) {
+		
+		trace.d = reflect(shade.wo, shade.N);
+		trace.throughput *= mat.albedo;
+
+	} else {
+
+		vec3 wi;
+		if(!MAT_sample(seed, mat, shade, wi)) {
+			trace.depth = consts.max_depth;
+			return;
+		}
+		
+		float pdf = MAT_pdf(mat, shade, wi);
+		vec3 atten = MAT_eval(mat, shade, wi);
+		if(pdf != 0) {
+			trace.throughput *= atten / pdf;
+		} else {
+			trace.depth = consts.max_depth;
+			return;
+		}
+	
+		trace.d = wi;
+	}
+}
+
+void make_camera_ray(uint s, out vec3 d) {
+
+    vec2 jitter;
+    if(consts.qmc == 0) {
+        jitter = consts.frame == 0 ? vec2(0.5) : vec2(randf(seed), randf(seed));
+    } else {
+        jitter = hammersley(s + consts.samples * consts.frame, consts.samples * consts.max_frame);
+    }
+
+    const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + jitter;
+    const vec2 inUV = pixelCenter / vec2(gl_LaunchSizeEXT.xy);
+    vec4 target = cam.iP * vec4(inUV * 2.0 - 1.0, 0, 1);
+    vec4 direction = cam.iV * vec4(target.xyz, 0);
+    d = normalize(direction.xyz);
 }
 
 void main() {
 
-    payload.seed = tea(gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.x, consts.frame * int(clockARB()));
-    vec3 o = (cam.iV * vec4(0, 0, 0, 1)).xyz;
+    seed = tea(gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.x, consts.frame * int(clockARB()));
+
     vec3 acc = vec3(0);
+    vec3 camera_o = (cam.iV * vec4(0, 0, 0, 1)).xyz;
 
     for(int s = 0; s < consts.samples; s++) {
-        
-        vec2 jitter;
-        if(consts.qmc == 0) {
-            jitter = consts.frame == 0 ? vec2(0.5) : vec2(randf(payload.seed), randf(payload.seed));
-        } else {
-            jitter = hammersley(s * consts.frame, consts.samples * consts.max_frame);
-        }
 
-        const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + jitter;
-        const vec2 inUV = pixelCenter / vec2(gl_LaunchSizeEXT.xy);
-        vec4 target = cam.iP * vec4(inUV * 2.0 - 1.0, 0, 1);
-        vec4 direction = cam.iV * vec4(target.xyz, 0);
+        TraceInfo trace;
+        trace.o = camera_o;
+        make_camera_ray(s, trace.d);
+        trace.acc = vec3(0);
+        trace.throughput = vec3(1);
+        trace.depth = 0;
+        trace.mis = 1;
 
-        vec3 throughput = vec3(1);
-        payload.nextWeight = vec3(0);
-        payload.nextO = o;
-        payload.nextD = normalize(direction.xyz);
-        payload.depth = 0;
-        payload.misWeight = 1;
-
-        for(; payload.depth < consts.max_depth; payload.depth++) {
-            payload.is_direct = false;
-            payload.shadowWeight = vec3(0);
-            traceRayEXT(TLAS,           // acceleration structure
-                gl_RayFlagsOpaqueEXT,   // rayFlags
-                0xFF,                   // cullMask
-                0,                      // sbtRecordOffset
-                0,                      // sbtRecordStride
-                0,                      // missIndex
-                payload.nextO,          // ray origin
-                EPS,                    // ray min range
-                payload.nextD,          // ray direction
-                LARGE_DIST,             // ray max range
-                0                       // payload (location = 0)
-            );
+        for(; trace.depth < consts.max_depth; trace.depth++) {
             
-            if(consts.use_nee == 1 && any(greaterThan(payload.shadowWeight, vec3(0))))
-                acc += directLight(payload.nextO, payload.shadowD) * payload.shadowWeight * throughput;
+            trace_ray(trace.o, trace.d);
 
-            acc += payload.emissive * throughput;
-            throughput *= payload.nextWeight;
+            if(!payload.hit) {
+                if(trace.depth == 0) {
+                    trace.acc = consts.clear_col.xyz;
+                } else {
+                    trace.acc += consts.env_light.xyz * trace.throughput;
+                }
+                break;
+            }
+
+            HitInfo hit = hit_info();
+            MatInfo mat = mat_info(hit);
+            ShadeInfo shade = shade_info(trace, hit, mat);
+
+            if(consts.integrator == 0) {
+                integrate_direct(trace, hit, mat, shade);
+            } else if(consts.integrator == 1) {
+                integrate_mats(trace, hit, mat, shade);
+            } else if(consts.integrator == 2) {
+                integrate_mis(trace, hit, mat, shade);
+            }
 
             if(consts.use_rr == 1) {
-                float pcont = min(max(throughput.x, max(throughput.y, throughput.z)) + 0.001, 0.95);
-                if(randf(payload.seed) >= pcont)
+                float pcont = min(max(trace.throughput.x, max(trace.throughput.y, trace.throughput.z)) + 0.001, 0.95);
+                if(randf(seed) >= pcont)
                     break;
-                throughput /= pcont;
+                trace.throughput /= pcont;
             }
         }
+
+        acc += trace.acc;
     }
 
     vec3 avg = acc / consts.samples;

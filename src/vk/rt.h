@@ -42,10 +42,10 @@ struct RTPipe {
     Vec3 env = Vec3{1.0f};
     float env_scale = 0.0f;
     bool use_normal_map = false;
-    bool use_nee = false;
     bool use_rr = true;
-    bool use_d_only = false;
     bool use_qmc = false;
+    int integrator = 0;
+    int brdf = 0;
 
 private:
     struct alignas(16) Scene_Desc {
@@ -65,17 +65,17 @@ private:
         unsigned int n_triangles;
     };
     struct RTPipe_Constants {
-        Vec4 clearColor;
-        Vec4 envlight;
+        Vec4 clear_col;
+        Vec4 env_light;
         int frame = -1;
         int samples;
         int max_frame;
         int qmc;
         int max_depth;
         int use_normal_map;
-        int use_nee;
+        int integrator;
+        int brdf;
         int use_rr;
-        int use_d_only;
         int n_lights;
         int n_objs;
     };

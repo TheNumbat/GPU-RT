@@ -31,17 +31,20 @@ struct Vertex {
 	vec4 tangent;
 };
 
-struct CH_Payload {
-	vec3 emissive;
-	vec3 nextO;
-	vec3 nextD;
-	vec3 nextWeight;
-	vec3 shadowWeight;
-	vec3 shadowD;
-	uint seed;
-	int depth;
-	float misWeight;
-	bool is_direct;
+struct TraceInfo {
+	vec3 o;
+	vec3 d;
+	vec3 acc;
+	uint depth;
+	vec3 throughput;
+	float mis;
+};
+
+struct Ray_Payload {
+	vec3 barycentrics;
+	uint obj_id;
+	uint prim_id;
+	bool hit;
 };
 
 struct HitInfo {
@@ -61,17 +64,17 @@ struct ShadeInfo {
 
 layout(push_constant) uniform Constants 
 {
-	vec4 clearColor;
-	vec4 envlight;
+	vec4 clear_col;
+	vec4 env_light;
 	int frame;
 	int samples;
 	int max_frame;
 	int qmc;
 	int max_depth;
 	int use_normal_map;
-	int use_nee;
+	int integrator;
+	int brdf;
 	int use_rr;
-	int use_d_only;
 	int n_lights;
 	int n_objs;
 } consts;
@@ -107,21 +110,20 @@ uint randu(inout uint prev, uint a, uint b) {
 
 // Sampling //////////////////////////////////////////
 
-// Hammersley sequence code from https://learnopengl.com/PBR/IBL/Specular-IBL 
 float radical_inverse(uint bits) {
     bits = (bits << 16u) | (bits >> 16u);
     bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
     bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
     bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
     bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
-    return float(bits) * 2.3283064365386963e-10; // / 0x100000000
+    return float(bits) * 2.3283064365386963e-10;
 }
 
 vec2 hammersley(uint i, uint N) {
     return vec2(float(i)/float(N), radical_inverse(i));
 }
 
-vec3 uniformHemisphere(inout uint seed, vec3 x, vec3 y, vec3 z) {
+vec3 uniform_hemisphere(inout uint seed, vec3 x, vec3 y, vec3 z) {
     float Xi1 = randf(seed);
     float Xi2 = randf(seed);
     float costheta = Xi1;
@@ -133,7 +135,7 @@ vec3 uniformHemisphere(inout uint seed, vec3 x, vec3 y, vec3 z) {
     return x * xs + y * ys + z * zs;
 }
 
-vec3 cosineHemisphere(inout uint seed, vec3 x, vec3 y, vec3 z) {
+vec3 cosine_hemisphere(inout uint seed, vec3 x, vec3 y, vec3 z) {
 	float phi = randf(seed);
 	float cosT2 = randf(seed);
 	float sinT = sqrt(1.0 - cosT2);
@@ -142,7 +144,7 @@ vec3 cosineHemisphere(inout uint seed, vec3 x, vec3 y, vec3 z) {
 	return direction;
 }
 
-vec3 cosinePowerHemisphere(float exponent, inout uint seed, vec3 x, vec3 y, vec3 z) {
+vec3 cospow_hemisphere(float exponent, inout uint seed, vec3 x, vec3 y, vec3 z) {
 	float phi = 2 * M_PI * randf(seed);
 	float cosT = pow(randf(seed), 1.0 / (exponent + 1.0));
 	float sinT = sqrt(1.0 - cosT*cosT);
@@ -151,7 +153,9 @@ vec3 cosinePowerHemisphere(float exponent, inout uint seed, vec3 x, vec3 y, vec3
 	return direction;
 }
 
-vec3 sampleTriangle(inout uint seed) {
+// Triangles //////////////////////////////////////////
+
+vec3 triangle_sample(inout uint seed) {
     float u = sqrt(randf(seed));
     float v = randf(seed);
     float a = u * (1 - v);
@@ -159,9 +163,7 @@ vec3 sampleTriangle(inout uint seed) {
     return vec3(a, b, 1 - a - b);
 }
 
-// Triangles //////////////////////////////////////////
-
-bool hitTriangle(vec3 o, vec3 d, vec3 pa, vec3 pb, vec3 pc, out vec3 hitp) {
+bool triangle_hit(vec3 o, vec3 d, vec3 pa, vec3 pb, vec3 pc, out vec3 hitp) {
 
 	vec3 v1 = pb - pa;
 	vec3 v2 = pc - pa;
@@ -184,9 +186,9 @@ bool hitTriangle(vec3 o, vec3 d, vec3 pa, vec3 pb, vec3 pc, out vec3 hitp) {
 	return t >= 0;
 }
 
-float trianglePDF(vec3 o, vec3 d, vec3 v0, vec3 v1, vec3 v2) {
+float triangle_pdf(vec3 o, vec3 d, vec3 v0, vec3 v1, vec3 v2) {
 	vec3 hitp;
-    if(hitTriangle(o, d, v0, v1, v2, hitp)) {
+    if(triangle_hit(o, d, v0, v1, v2, hitp)) {
         float a = 2 / length(cross(v1 - v0, v2 - v0));
 		vec3 dist = hitp - o;
 		vec3 N = normalize(cross(v1 - v0, v2 - v0));
@@ -198,7 +200,7 @@ float trianglePDF(vec3 o, vec3 d, vec3 v0, vec3 v1, vec3 v2) {
 
 // Misc //////////////////////////////////////////
 
-void normalCoords(vec3 N, out vec3 Nt, out vec3 Nb) {
+void make_tanspace(vec3 N, out vec3 Nt, out vec3 Nb) {
 	if(abs(N.x) > abs(N.y))
 		Nt = vec3(N.z, 0, -N.x) / sqrt(N.x * N.x + N.z * N.z);
 	else
@@ -206,32 +208,34 @@ void normalCoords(vec3 N, out vec3 Nt, out vec3 Nb) {
 	Nb = cross(N, Nt);
 }
 
-float powerHeuristic(float a, float b) {
+float power_heuristic(float a, float b) {
 	return a*a / (a*a + b*b);
 }
 
 // Blinn-Phong Material //////////////////////////////////////////
 
-bool bp_sample(float exp, vec3 d, inout uint seed, vec3 T, vec3 BT, vec3 N, out vec3 scatter) {
-	vec3 H = cosinePowerHemisphere(exp, seed, T, BT, N);
-	scatter = reflect(d, H);
-	return dot(N, scatter) > 0;
-}
-
-float bp_pdf(float exp, vec3 d, vec3 scatter, vec3 N) {
+float bp_pdf(MatInfo mat, ShadeInfo shade, vec3 wi) {
 	
-	float oDn = dot(-d, N);
-	float iDn = dot(scatter, N);
+	float oDn = dot(-shade.wo, shade.N);
+	float iDn = dot(wi, shade.N);
 	if(oDn <= 0 || iDn <= 0) return 0;
 
-	vec3 H = normalize(scatter - d);
-	float cosine = max(dot(H, N), 0);
+	float exp = 1 / mat.roughness;
+	vec3 H = normalize(wi - shade.wo);
+	float cosine = max(dot(H, shade.N), 0);
 	float N_pdf = (exp + 1) / (2 * M_PI) * pow(cosine, exp);
-	return N_pdf / (4 * dot(-d, H));
+	return N_pdf / (4 * dot(-shade.wo, H));
 }
 
-vec3 bp_eval(vec3 albedo, float pdf) {
-	return albedo * pdf;
+vec3 bp_eval(MatInfo mat, ShadeInfo shade, vec3 wi) {
+	return mat.albedo * bp_pdf(mat, shade, wi);
+}
+
+bool bp_sample(inout uint seed, MatInfo mat, ShadeInfo shade, out vec3 wi) {
+	float exp = 1 / mat.roughness;
+	vec3 H = cospow_hemisphere(exp, seed, shade.T, shade.B, shade.N);
+	wi = reflect(shade.wo, H);
+	return dot(wi, shade.N) > 0;
 }
 
 // GGX Material //////////////////////////////////////////
@@ -299,3 +303,29 @@ bool GGX_sample(inout uint seed, MatInfo mat, ShadeInfo shade, out vec3 wi) {
 	wi = reflect(shade.wo, H);
     return dot(wi, shade.N) > 0;
 }  
+
+// Material //////////////////////////////////////////
+
+float MAT_pdf(MatInfo mat, ShadeInfo shade, vec3 wi) {
+	if(consts.brdf == 0) {
+		return bp_pdf(mat, shade, wi);
+	} else if(consts.brdf == 1) {
+		return GGX_pdf(mat, shade, wi);
+	}
+}
+
+vec3 MAT_eval(MatInfo mat, ShadeInfo shade, vec3 wi) {
+	if(consts.brdf == 0) {
+		return bp_eval(mat, shade, wi);
+	} else if(consts.brdf == 1) {
+		return GGX_eval(mat, shade, wi);
+	}
+}
+
+bool MAT_sample(inout uint seed, MatInfo mat, ShadeInfo shade, out vec3 wi) {
+	if(consts.brdf == 0) {
+		return bp_sample(seed, mat, shade, wi);
+	} else if(consts.brdf == 1) {
+		return GGX_sample(seed, mat, shade, wi);
+	}
+}

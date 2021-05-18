@@ -172,13 +172,13 @@ bool RTPipe::trace(const Camera& cam, VkCommandBuffer& cmds, VkExtent2D ext) {
 
     if(consts.frame >= max_frames) return false;
 
-    consts.clearColor = Vec4{clear, 1.0f};
-    consts.envlight = Vec4{env_scale * env, 1.0f};
+    consts.clear_col = Vec4{clear, 1.0f};
+    consts.env_light = Vec4{env_scale * env, 1.0f};
     consts.samples = samples_per_frame;
     consts.max_depth = max_depth;
     consts.use_normal_map = use_normal_map;
-    consts.use_nee = use_nee;
-    consts.use_d_only = use_d_only;
+    consts.integrator = integrator;
+    consts.brdf = brdf;
     consts.use_rr = use_rr;
     consts.max_frame = max_frames;
     consts.qmc = use_qmc;
@@ -353,42 +353,42 @@ void RTPipe::create_desc(const Scene& scene) {
     d_bind.binding = 1;
     d_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     d_bind.descriptorCount = 1;
-    d_bind.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+    d_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
     d_bind.pImmutableSamplers = nullptr;
 
     VkDescriptorSetLayoutBinding l_bind = {};
     l_bind.binding = 2;
     l_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     l_bind.descriptorCount = 1;
-    l_bind.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+    l_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
     l_bind.pImmutableSamplers = nullptr;
 
     VkDescriptorSetLayoutBinding v_bind = {};
     v_bind.binding = 3;
     v_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     v_bind.descriptorCount = n_objects;
-    v_bind.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+    v_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
     v_bind.pImmutableSamplers = nullptr;
 
     VkDescriptorSetLayoutBinding i_bind = {};
     i_bind.binding = 4;
     i_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     i_bind.descriptorCount = n_objects;
-    i_bind.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+    i_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
     i_bind.pImmutableSamplers = nullptr;
 
     VkDescriptorSetLayoutBinding t_bind = {};
     t_bind.binding = 5;
     t_bind.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     t_bind.descriptorCount = textures.size();
-    t_bind.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+    t_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
     t_bind.pImmutableSamplers = nullptr;
 
     VkDescriptorSetLayoutBinding a_bind = {};
     a_bind.binding = 6;
     a_bind.descriptorCount = 1;
     a_bind.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
-    a_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+    a_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
 
     VkDescriptorSetLayoutBinding store_bind = {};
     store_bind.binding = 7;

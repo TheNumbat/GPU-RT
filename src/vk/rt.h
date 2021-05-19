@@ -43,11 +43,23 @@ struct RTPipe {
     float env_scale = 0.0f;
     bool use_normal_map = false;
     bool use_rr = true;
+    bool use_metalness = false;
     bool use_qmc = false;
+    bool reset_res = false;
+    bool use_temporal = true;
     int integrator = 0;
     int brdf = 0;
+    int res_samples = 4;
 
 private:
+    struct alignas(16) Reservoir {
+        Vec4 pos;
+	    Vec4 normal;
+        Vec4 emissive;
+	    float w_sum;
+        float w;
+	    unsigned int n_seen;
+    };
     struct alignas(16) Scene_Desc {
         Mat4 model;
         Mat4 modelIT;
@@ -60,7 +72,9 @@ private:
         int normal_tex;
         unsigned int index;
     };
-    struct Scene_Light {
+    struct alignas(16) Scene_Light {
+        Vec4 bmin;
+        Vec4 bmax;
         unsigned int index;
         unsigned int n_triangles;
     };
@@ -73,27 +87,48 @@ private:
         int qmc;
         int max_depth;
         int use_normal_map;
+        int use_metalness;
+        int reset_res;
         int integrator;
         int brdf;
         int use_rr;
         int n_lights;
         int n_objs;
     };
+    
+    struct ReSTIRConstants {
+        Mat4 prev_PV;
+        unsigned int new_samples;
+        unsigned int temporal_multiplier;
+    };
 
-    std::vector<Drop<Buffer>> camera_uniforms;
+    struct CameraConstants {
+        Mat4 V, P, iV, iP;
+    };
+
+    struct UBO {
+        CameraConstants camera;
+        ReSTIRConstants restir;
+    };
+
+    std::vector<Drop<Buffer>> ubos;
     
     Drop<Buffer> sbt;
     Drop<Buffer> desc_buf, light_buf;
+    Drop<Buffer> res0, res1;
 
     std::vector<VK::Drop<VK::Image>> textures;
     std::vector<VK::Drop<VK::ImageView>> texture_views;
     VK::Drop<VK::Sampler> texture_sampler;
 
     RTPipe_Constants consts;
-    Cam_Uniforms old_cam;
+    CameraConstants old_cam = {};
+    VkExtent2D prev_ext = {};
 
     void create_sbt();
     void create_pipe();
+    void build_res_bufs();
+    void write_res_bufs();
     void create_desc(const Scene& scene);
     void build_desc(const Scene& scene);
     void build_textures(const Scene& scene);

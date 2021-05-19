@@ -21,8 +21,20 @@ struct Scene_Obj {
 };
 
 struct Scene_Light {
+	vec4 bb_min;
+	vec4 bb_max;
 	uint index;
 	uint n_triangles;
+};
+
+struct Scene_Light_Sample {
+	uint l_idx;
+	uint o_idx;
+	uint t_idx;
+	vec3 pos;
+	vec3 normal;
+	vec3 emissive;
+	float pdf;
 };
 
 struct Vertex {
@@ -72,6 +84,8 @@ layout(push_constant) uniform Constants
 	int qmc;
 	int max_depth;
 	int use_normal_map;
+	int use_metalness;
+	int reset_res;
 	int integrator;
 	int brdf;
 	int use_rr;
@@ -210,6 +224,29 @@ void make_tanspace(vec3 N, out vec3 Nt, out vec3 Nb) {
 
 float power_heuristic(float a, float b) {
 	return a*a / (a*a + b*b);
+}
+
+float luma(vec3 rgb) {
+	return 0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b;
+}
+
+float max4(vec3 v, float f) {
+	return max(max(v.x, v.y),max(v.z, f));
+}
+
+float min3(vec3 v) {
+	return min(min(v.x, v.y), v.z);
+}
+
+bool hit_bbox(vec3 o, vec3 d, vec3 bmin, vec3 bmax) {
+	vec3 invD = 1 / d;
+	vec3 t0 = (bmin - o) * invD;
+	vec3 t1 = (bmax - o) * invD;
+	vec3 tNear = min(t0,t1);
+	vec3 tFar = max(t0,t1);
+	float tNearMax = max4(tNear, 0.0f);
+	float tFarMin = min3(tFar);
+	return tNearMax <= tFarMin;
 }
 
 // Blinn-Phong Material //////////////////////////////////////////

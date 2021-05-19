@@ -41,9 +41,14 @@ struct Mesh {
         return _idxs;
     }
 
+    BBox bbox() const {
+        return _bbox;
+    }
+
 private:
     std::vector<Vertex> _verts;
     std::vector<Index> _idxs;
+    BBox _bbox;
     mutable Drop<Buffer> vbuf, ibuf;
     mutable bool dirty = false;
 

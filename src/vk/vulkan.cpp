@@ -977,6 +977,9 @@ void Manager::submit_frame(ImageView& out_image) {
 
     VK_CHECK(vkResetFences(gpu.device, 1, &frame.fence));
     VK_CHECK(vkQueueSubmit(gpu.graphics_queue, 1, &sub_info, frame.fence));
+
+    // TODO: cringe
+    VK_CHECK(vkWaitForFences(gpu.device, 1, &frame.fence, VK_TRUE, UINT64_MAX));
 }
 
 std::pair<unsigned int, unsigned int> Manager::Swapchain::dim() {

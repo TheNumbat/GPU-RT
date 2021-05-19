@@ -274,6 +274,7 @@ void GPURT::UIsidebar() {
         change = true;
     }
     change = change || ImGui::Checkbox("Normal Maps", &rt_pipe.use_normal_map);
+    change = change || ImGui::Checkbox("Metalness", &rt_pipe.use_metalness);
 
     ImGui::Separator();
 
@@ -283,10 +284,19 @@ void GPURT::UIsidebar() {
     change = change || ImGui::Checkbox("Roulette", &rt_pipe.use_rr);
     change = change || ImGui::Checkbox("QMC", &rt_pipe.use_qmc);
 
-    const char* integrators[] = {"Direct", "Material", "MIS"};
+    const char* integrators[] = {"Direct", "Material", "MIS", "ReSTIR"};
     const char* brdfs[] = {"BlinnPhong", "GGX"};
-    change = change || ImGui::Combo("Integrator", &rt_pipe.integrator, integrators, 3);
+    change = change || ImGui::Combo("Integrator", &rt_pipe.integrator, integrators, 4);
     change = change || ImGui::Combo("BRDF", &rt_pipe.brdf, brdfs, 2);
+    
+    if(rt_pipe.integrator == 3) {
+        change = change || ImGui::SliderInt("Res", &rt_pipe.res_samples, 1, 32);
+        change = change || ImGui::Checkbox("Temporal Reuse", &rt_pipe.use_temporal);
+        if(ImGui::Button("Reset Reservoirs")) {
+            rt_pipe.reset_res = true;
+            change = true;
+        }
+    }
     
     if(change) rt_pipe.reset_frame();
     

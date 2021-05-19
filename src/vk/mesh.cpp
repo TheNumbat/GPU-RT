@@ -45,6 +45,7 @@ Mesh::Mesh(Mesh&& src) {
 Mesh& Mesh::operator=(Mesh&& src) {
     _verts = std::move(src._verts);
     _idxs = std::move(src._idxs);
+    _bbox = std::move(src._bbox);
     vbuf = std::move(src.vbuf);
     ibuf = std::move(src.ibuf);
     dirty = src.dirty;
@@ -68,6 +69,10 @@ void Mesh::recreate(std::vector<Mesh::Vertex>&& vertices, std::vector<Mesh::Inde
                        VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
                        VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
                    VMA_MEMORY_USAGE_GPU_ONLY);
+
+    BBox box;
+    for(auto& v : _verts) box.enclose(v.pos.xyz());
+    _bbox = box;
 }
 
 void Mesh::sync() const {

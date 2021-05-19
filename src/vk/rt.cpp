@@ -50,6 +50,8 @@ void RTPipe::build_desc(const Scene& scene) {
             Scene_Light light;
             light.index = obj_to_idx[obj.id()];
             light.n_triangles = obj.mesh().inds().size() / 3;
+            light.bmin = Vec4{obj.mesh().bbox().min, 0.0f};
+            light.bmax = Vec4{obj.mesh().bbox().max, 0.0f};
             lights.push_back(light);
         }
     });
@@ -105,7 +107,7 @@ void RTPipe::build_desc(const Scene& scene) {
 }
 
 void RTPipe::destroy() {
-    camera_uniforms.clear();
+    ubos.clear();
     pipe.drop();
 }
 
@@ -116,18 +118,21 @@ void RTPipe::recreate_swap(const Scene& scene) {
 
 void RTPipe::update_uniforms(const Camera& cam) {
 
-    Cam_Uniforms ubo;
-    ubo.V = cam.get_view();
-    ubo.P = cam.get_proj();
-    ubo.iV = ubo.V.inverse();
-    ubo.iP = ubo.P.inverse();
+    UBO ubo;
+    ubo.camera.V = cam.get_view();
+    ubo.camera.P = cam.get_proj();
+    ubo.camera.iV = ubo.camera.V.inverse();
+    ubo.camera.iP = ubo.camera.P.inverse();
+    ubo.restir.new_samples = res_samples;
+    ubo.restir.prev_PV = old_cam.P * old_cam.V;
+    ubo.restir.temporal_multiplier = consts.max_frame * res_samples;
 
-    if(consts.frame >= 0 && std::memcmp(&ubo, &old_cam, sizeof(Cam_Uniforms))) {
+    if(consts.frame >= 0 && std::memcmp(&ubo.camera, &old_cam, sizeof(CameraConstants))) {
         reset_frame();
-        old_cam = ubo;
+        old_cam = ubo.camera;
     }
 
-    camera_uniforms[vk().frame()]->write(&ubo, sizeof(ubo));
+    ubos[vk().frame()]->write(&ubo, sizeof(ubo));
 }
 
 void RTPipe::use_image(const ImageView& out) {
@@ -168,7 +173,53 @@ void RTPipe::use_accel(const Accel& tlas) {
     vkUpdateDescriptorSets(vk().device(), 1, &acw, 0, nullptr);
 }
 
+void RTPipe::build_res_bufs() {
+    res0->recreate(sizeof(Reservoir) * prev_ext.width * prev_ext.height, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+    res1->recreate(sizeof(Reservoir) * prev_ext.width * prev_ext.height, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+}
+
+void RTPipe::write_res_bufs() {
+
+    bool even = consts.frame % 2;
+
+    VkDescriptorBufferInfo res_b = {};
+    res_b.buffer = even ? res0->buf : res1->buf;
+    res_b.offset = 0;
+    res_b.range = VK_WHOLE_SIZE;
+
+    VkDescriptorBufferInfo prev_res_b = {};
+    res_b.buffer = even ? res1->buf : res0->buf;
+    prev_res_b.offset = 0;
+    prev_res_b.range = VK_WHOLE_SIZE;
+
+    VkWriteDescriptorSet res_w = {};
+    res_w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    res_w.dstSet = pipe->descriptor_sets[vk().frame()];
+    res_w.dstBinding = 8;
+    res_w.dstArrayElement = 0;
+    res_w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    res_w.descriptorCount = 1;
+    res_w.pBufferInfo = &res_b;
+
+    VkWriteDescriptorSet prev_res_w = {};
+    prev_res_w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    prev_res_w.dstSet = pipe->descriptor_sets[vk().frame()];
+    prev_res_w.dstBinding = 9;
+    prev_res_w.dstArrayElement = 0;
+    prev_res_w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    prev_res_w.descriptorCount = 1;
+    prev_res_w.pBufferInfo = &prev_res_b;
+
+    std::vector<VkWriteDescriptorSet> writes = {res_w, prev_res_w};
+    vkUpdateDescriptorSets(vk().device(), writes.size(), writes.data(), 0, nullptr);
+}
+
 bool RTPipe::trace(const Camera& cam, VkCommandBuffer& cmds, VkExtent2D ext) {
+
+    if(ext.width != prev_ext.width || ext.height != prev_ext.height) {
+        prev_ext = ext;
+        build_res_bufs();
+    }
 
     if(consts.frame >= max_frames) return false;
 
@@ -177,12 +228,17 @@ bool RTPipe::trace(const Camera& cam, VkCommandBuffer& cmds, VkExtent2D ext) {
     consts.samples = samples_per_frame;
     consts.max_depth = max_depth;
     consts.use_normal_map = use_normal_map;
+    consts.use_metalness = use_metalness;
     consts.integrator = integrator;
     consts.brdf = brdf;
     consts.use_rr = use_rr;
     consts.max_frame = max_frames;
     consts.qmc = use_qmc;
+    consts.reset_res = reset_res || !use_temporal;
+    reset_res = false;
     consts.frame++;
+
+    write_res_bufs();
 
     vkCmdBindPipeline(cmds, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipe->pipe);
     vkCmdBindDescriptorSets(cmds, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipe->p_layout, 0, 1,
@@ -347,42 +403,36 @@ void RTPipe::create_desc(const Scene& scene) {
     ubo_bind.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     ubo_bind.descriptorCount = 1;
     ubo_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
-    ubo_bind.pImmutableSamplers = nullptr;
 
     VkDescriptorSetLayoutBinding d_bind = {};
     d_bind.binding = 1;
     d_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     d_bind.descriptorCount = 1;
     d_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
-    d_bind.pImmutableSamplers = nullptr;
 
     VkDescriptorSetLayoutBinding l_bind = {};
     l_bind.binding = 2;
     l_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     l_bind.descriptorCount = 1;
     l_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
-    l_bind.pImmutableSamplers = nullptr;
 
     VkDescriptorSetLayoutBinding v_bind = {};
     v_bind.binding = 3;
     v_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     v_bind.descriptorCount = n_objects;
     v_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
-    v_bind.pImmutableSamplers = nullptr;
 
     VkDescriptorSetLayoutBinding i_bind = {};
     i_bind.binding = 4;
     i_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     i_bind.descriptorCount = n_objects;
     i_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
-    i_bind.pImmutableSamplers = nullptr;
 
     VkDescriptorSetLayoutBinding t_bind = {};
     t_bind.binding = 5;
     t_bind.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     t_bind.descriptorCount = textures.size();
     t_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
-    t_bind.pImmutableSamplers = nullptr;
 
     VkDescriptorSetLayoutBinding a_bind = {};
     a_bind.binding = 6;
@@ -394,10 +444,21 @@ void RTPipe::create_desc(const Scene& scene) {
     store_bind.binding = 7;
     store_bind.descriptorCount = 1;
     store_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    store_bind.pImmutableSamplers = nullptr;
     store_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
 
-    std::vector<VkDescriptorSetLayoutBinding> bindings = {ubo_bind, d_bind, l_bind, v_bind, i_bind, t_bind, a_bind, store_bind};
+    VkDescriptorSetLayoutBinding res_bind = {};
+    res_bind.binding = 8;
+    res_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    res_bind.descriptorCount = 1;
+    res_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+
+    VkDescriptorSetLayoutBinding prev_res_bind = {};
+    prev_res_bind.binding = 9;
+    prev_res_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    prev_res_bind.descriptorCount = 1;
+    prev_res_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+
+    std::vector<VkDescriptorSetLayoutBinding> bindings = {ubo_bind, d_bind, l_bind, v_bind, i_bind, t_bind, a_bind, store_bind, res_bind, prev_res_bind};
 
     VkDescriptorSetLayoutCreateInfo layout_info = {};
     layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -417,18 +478,18 @@ void RTPipe::create_desc(const Scene& scene) {
     pipe->descriptor_sets.resize(Manager::MAX_IN_FLIGHT);
     VK_CHECK(vkAllocateDescriptorSets(vk().device(), &alloc_info, pipe->descriptor_sets.data()));
 
-    camera_uniforms.resize(Manager::MAX_IN_FLIGHT);
+    ubos.resize(Manager::MAX_IN_FLIGHT);
     for(unsigned int i = 0; i < Manager::MAX_IN_FLIGHT; i++) {
 
-        camera_uniforms[i]->recreate(sizeof(Cam_Uniforms), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        ubos[i]->recreate(sizeof(UBO), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                                      VMA_MEMORY_USAGE_CPU_TO_GPU);
 
         std::vector<VkDescriptorBufferInfo> vbufs, ibufs;
 
         VkDescriptorBufferInfo ub = {};
-        ub.buffer = camera_uniforms[i]->buf;
+        ub.buffer = ubos[i]->buf;
         ub.offset = 0;
-        ub.range = sizeof(Cam_Uniforms);
+        ub.range = sizeof(UBO);
 
         scene.for_objs([&](const Object& obj) {
             VkDescriptorBufferInfo vb = {};

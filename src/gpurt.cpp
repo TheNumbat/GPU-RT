@@ -284,10 +284,12 @@ void GPURT::UIsidebar() {
     change = change || ImGui::Checkbox("Roulette", &rt_pipe.use_rr);
     change = change || ImGui::Checkbox("QMC", &rt_pipe.use_qmc);
 
-    const char* integrators[] = {"Direct", "Material", "MIS", "ReSTIR"};
+    const char* integrators[] = {"Direct", "Material", "MIS", "ReSTIR Direct", "ReSTIR"};
     const char* brdfs[] = {"BlinnPhong", "GGX"};
-    change = change || ImGui::Combo("Integrator", &rt_pipe.integrator, integrators, 4);
+    const char* debug_views[] = {"None", "Pos", "Norm", "Albedo"};
+    change = change || ImGui::Combo("Integrator", &rt_pipe.integrator, integrators, 5);
     change = change || ImGui::Combo("BRDF", &rt_pipe.brdf, brdfs, 2);
+    change = change || ImGui::Combo("Debug", &rt_pipe.debug_view, debug_views, 4);
     
     if(rt_pipe.integrator == 3) {
         change = change || ImGui::SliderInt("Res", &rt_pipe.res_samples, 1, 32);
@@ -498,3 +500,4 @@ void GPURT::event(SDL_Event e) {
 
 void GPURT::apply_window_dim(Vec2 new_dim) {
 }
+

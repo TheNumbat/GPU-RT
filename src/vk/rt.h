@@ -49,7 +49,11 @@ struct RTPipe {
     bool use_temporal = true;
     int integrator = 0;
     int brdf = 0;
+    int debug_view = 0;
     int res_samples = 4;
+
+    Drop<Image> pos_image[2], norm_image[2], alb_image[2];
+    Drop<ImageView> pos_image_view[2], norm_image_view[2], alb_image_view[2];
 
 private:
     struct alignas(16) Reservoir {
@@ -91,6 +95,7 @@ private:
         int reset_res;
         int integrator;
         int brdf;
+        int debug_view;
         int use_rr;
         int n_lights;
         int n_objs;
@@ -117,9 +122,11 @@ private:
     Drop<Buffer> desc_buf, light_buf;
     Drop<Buffer> res0, res1;
 
-    std::vector<VK::Drop<VK::Image>> textures;
-    std::vector<VK::Drop<VK::ImageView>> texture_views;
-    VK::Drop<VK::Sampler> texture_sampler;
+    Drop<Sampler> gbuf_sampler;
+
+    std::vector<Drop<Image>> textures;
+    std::vector<Drop<ImageView>> texture_views;
+    Drop<Sampler> texture_sampler;
 
     RTPipe_Constants consts;
     CameraConstants old_cam = {};
@@ -127,8 +134,8 @@ private:
 
     void create_sbt();
     void create_pipe();
-    void build_res_bufs();
-    void write_res_bufs();
+    void resize_temporal_stuff();
+    void bind_temporal_stuff(VkCommandBuffer cmds);
     void create_desc(const Scene& scene);
     void build_desc(const Scene& scene);
     void build_textures(const Scene& scene);

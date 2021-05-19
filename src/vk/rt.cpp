@@ -173,14 +173,53 @@ void RTPipe::use_accel(const Accel& tlas) {
     vkUpdateDescriptorSets(vk().device(), 1, &acw, 0, nullptr);
 }
 
-void RTPipe::build_res_bufs() {
+void RTPipe::resize_temporal_stuff() {
+
+    res0.drop();
+    res1.drop();
+
     res0->recreate(sizeof(Reservoir) * prev_ext.width * prev_ext.height, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
     res1->recreate(sizeof(Reservoir) * prev_ext.width * prev_ext.height, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+
+    pos_image[0].drop();
+    pos_image[1].drop();
+    norm_image[0].drop();
+    norm_image[1].drop();
+    alb_image[0].drop();
+    alb_image[1].drop();
+
+    pos_image[0]->recreate(prev_ext.width, prev_ext.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+    pos_image[1]->recreate(prev_ext.width, prev_ext.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+    norm_image[0]->recreate(prev_ext.width, prev_ext.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+    norm_image[1]->recreate(prev_ext.width, prev_ext.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+    alb_image[0]->recreate(prev_ext.width, prev_ext.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+    alb_image[1]->recreate(prev_ext.width, prev_ext.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+
+    pos_image_view[0].drop();
+    pos_image_view[1].drop();
+    norm_image_view[0].drop();
+    norm_image_view[1].drop();
+    alb_image_view[0].drop();
+    alb_image_view[1].drop();
+
+    pos_image_view[0]->recreate(pos_image[0], VK_IMAGE_ASPECT_COLOR_BIT);
+    pos_image_view[1]->recreate(pos_image[1], VK_IMAGE_ASPECT_COLOR_BIT);
+    norm_image_view[0]->recreate(norm_image[0], VK_IMAGE_ASPECT_COLOR_BIT);
+    norm_image_view[1]->recreate(norm_image[1], VK_IMAGE_ASPECT_COLOR_BIT);
+    alb_image_view[0]->recreate(alb_image[0], VK_IMAGE_ASPECT_COLOR_BIT);
+    alb_image_view[1]->recreate(alb_image[1], VK_IMAGE_ASPECT_COLOR_BIT);
+
+    pos_image[0]->transition(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    norm_image[0]->transition(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    alb_image[0]->transition(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    pos_image[1]->transition(VK_IMAGE_LAYOUT_GENERAL);
+    norm_image[1]->transition(VK_IMAGE_LAYOUT_GENERAL);
+    alb_image[1]->transition(VK_IMAGE_LAYOUT_GENERAL);
 }
 
-void RTPipe::write_res_bufs() {
+void RTPipe::bind_temporal_stuff(VkCommandBuffer cmds) {
 
-    bool even = consts.frame % 2;
+    bool even = vk().frame() % 2;
 
     VkDescriptorBufferInfo res_b = {};
     res_b.buffer = even ? res0->buf : res1->buf;
@@ -210,15 +249,103 @@ void RTPipe::write_res_bufs() {
     prev_res_w.descriptorCount = 1;
     prev_res_w.pBufferInfo = &prev_res_b;
 
-    std::vector<VkWriteDescriptorSet> writes = {res_w, prev_res_w};
+    VkDescriptorImageInfo pos_info = {};
+    pos_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+    pos_info.imageView = pos_image_view[even]->view;
+
+    VkDescriptorImageInfo norm_info = {};
+    norm_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+    norm_info.imageView = norm_image_view[even]->view;
+
+    VkDescriptorImageInfo alb_info = {};
+    alb_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+    alb_info.imageView = alb_image_view[even]->view;
+
+    VkDescriptorImageInfo ppos_info = {};
+    ppos_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    ppos_info.imageView = pos_image_view[!even]->view;
+    ppos_info.sampler = gbuf_sampler->sampler;
+
+    VkDescriptorImageInfo pnorm_info = {};
+    pnorm_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    pnorm_info.imageView = norm_image_view[!even]->view;
+    pnorm_info.sampler = gbuf_sampler->sampler;
+
+    VkDescriptorImageInfo palb_info = {};
+    palb_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    palb_info.imageView = alb_image_view[!even]->view;
+    palb_info.sampler = gbuf_sampler->sampler;
+
+    VkWriteDescriptorSet pos_write = {};
+    pos_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    pos_write.dstSet = pipe->descriptor_sets[vk().frame()];
+    pos_write.dstBinding = 10;
+    pos_write.dstArrayElement = 0;
+    pos_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    pos_write.descriptorCount = 1;
+    pos_write.pImageInfo = &pos_info;
+
+    VkWriteDescriptorSet norm_write = {};
+    norm_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    norm_write.dstSet = pipe->descriptor_sets[vk().frame()];
+    norm_write.dstBinding = 11;
+    norm_write.dstArrayElement = 0;
+    norm_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    norm_write.descriptorCount = 1;
+    norm_write.pImageInfo = &norm_info;
+
+    VkWriteDescriptorSet alb_write = {};
+    alb_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    alb_write.dstSet = pipe->descriptor_sets[vk().frame()];
+    alb_write.dstBinding = 12;
+    alb_write.dstArrayElement = 0;
+    alb_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    alb_write.descriptorCount = 1;
+    alb_write.pImageInfo = &alb_info;
+
+    VkWriteDescriptorSet ppos_write = {};
+    ppos_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    ppos_write.dstSet = pipe->descriptor_sets[vk().frame()];
+    ppos_write.dstBinding = 13;
+    ppos_write.dstArrayElement = 0;
+    ppos_write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    ppos_write.descriptorCount = 1;
+    ppos_write.pImageInfo = &ppos_info;
+
+    VkWriteDescriptorSet pnorm_write = {};
+    pnorm_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    pnorm_write.dstSet = pipe->descriptor_sets[vk().frame()];
+    pnorm_write.dstBinding = 14;
+    pnorm_write.dstArrayElement = 0;
+    pnorm_write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    pnorm_write.descriptorCount = 1;
+    pnorm_write.pImageInfo = &pnorm_info;
+
+    VkWriteDescriptorSet palb_write = {};
+    palb_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    palb_write.dstSet = pipe->descriptor_sets[vk().frame()];
+    palb_write.dstBinding = 15;
+    palb_write.dstArrayElement = 0;
+    palb_write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    palb_write.descriptorCount = 1;
+    palb_write.pImageInfo = &palb_info;
+
+    std::vector<VkWriteDescriptorSet> writes = {res_w, prev_res_w, pos_write, norm_write, alb_write, ppos_write, pnorm_write, palb_write};
     vkUpdateDescriptorSets(vk().device(), writes.size(), writes.data(), 0, nullptr);
+
+    pos_image[even]->transition(cmds, VK_IMAGE_LAYOUT_GENERAL);
+    norm_image[even]->transition(cmds, VK_IMAGE_LAYOUT_GENERAL);
+    alb_image[even]->transition(cmds, VK_IMAGE_LAYOUT_GENERAL);
+    pos_image[!even]->transition(cmds, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    norm_image[!even]->transition(cmds, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    alb_image[!even]->transition(cmds, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 }
 
 bool RTPipe::trace(const Camera& cam, VkCommandBuffer& cmds, VkExtent2D ext) {
 
     if(ext.width != prev_ext.width || ext.height != prev_ext.height) {
         prev_ext = ext;
-        build_res_bufs();
+        resize_temporal_stuff();
     }
 
     if(consts.frame >= max_frames) return false;
@@ -235,10 +362,11 @@ bool RTPipe::trace(const Camera& cam, VkCommandBuffer& cmds, VkExtent2D ext) {
     consts.max_frame = max_frames;
     consts.qmc = use_qmc;
     consts.reset_res = reset_res || !use_temporal;
+    consts.debug_view = debug_view;
     reset_res = false;
     consts.frame++;
 
-    write_res_bufs();
+    bind_temporal_stuff(cmds);
 
     vkCmdBindPipeline(cmds, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipe->pipe);
     vkCmdBindDescriptorSets(cmds, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipe->p_layout, 0, 1,
@@ -316,6 +444,9 @@ void RTPipe::build_textures(const Scene& scene) {
 
     texture_sampler.drop();
     texture_sampler->recreate(VK_FILTER_LINEAR, VK_FILTER_LINEAR);
+
+    gbuf_sampler.drop();
+    gbuf_sampler->recreate(VK_FILTER_NEAREST, VK_FILTER_NEAREST);
 }
 
 void RTPipe::create_pipe() {
@@ -458,7 +589,43 @@ void RTPipe::create_desc(const Scene& scene) {
     prev_res_bind.descriptorCount = 1;
     prev_res_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
 
-    std::vector<VkDescriptorSetLayoutBinding> bindings = {ubo_bind, d_bind, l_bind, v_bind, i_bind, t_bind, a_bind, store_bind, res_bind, prev_res_bind};
+    VkDescriptorSetLayoutBinding store_pos_bind = {};
+    store_pos_bind.binding = 10;
+    store_pos_bind.descriptorCount = 1;
+    store_pos_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    store_pos_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+
+    VkDescriptorSetLayoutBinding store_norm_bind = {};
+    store_norm_bind.binding = 11;
+    store_norm_bind.descriptorCount = 1;
+    store_norm_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    store_norm_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+
+    VkDescriptorSetLayoutBinding store_alb_bind = {};
+    store_alb_bind.binding = 12;
+    store_alb_bind.descriptorCount = 1;
+    store_alb_bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    store_alb_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+
+    VkDescriptorSetLayoutBinding read_pos_bind = {};
+    read_pos_bind.binding = 13;
+    read_pos_bind.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    read_pos_bind.descriptorCount = 1;
+    read_pos_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+
+    VkDescriptorSetLayoutBinding read_norm_bind = {};
+    read_norm_bind.binding = 14;
+    read_norm_bind.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    read_norm_bind.descriptorCount = 1;
+    read_norm_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+
+    VkDescriptorSetLayoutBinding read_alb_bind = {};
+    read_alb_bind.binding = 15;
+    read_alb_bind.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    read_alb_bind.descriptorCount = 1;
+    read_alb_bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+
+    std::vector<VkDescriptorSetLayoutBinding> bindings = {ubo_bind, d_bind, l_bind, v_bind, i_bind, t_bind, a_bind, store_bind, res_bind, prev_res_bind, store_pos_bind, store_norm_bind, store_alb_bind, read_pos_bind, read_norm_bind, read_alb_bind};
 
     VkDescriptorSetLayoutCreateInfo layout_info = {};
     layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;

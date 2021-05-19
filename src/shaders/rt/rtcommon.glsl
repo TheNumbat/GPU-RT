@@ -88,6 +88,7 @@ layout(push_constant) uniform Constants
 	int reset_res;
 	int integrator;
 	int brdf;
+	int debug_view;
 	int use_rr;
 	int n_lights;
 	int n_objs;

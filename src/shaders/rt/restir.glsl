@@ -1,8 +1,4 @@
 
-// mostly based on https://github.com/lukedan/ReSTIR-Vulkan
-
-#define RESERVOIR_SIZE 1
-
 struct Reservoir {
     vec3 pos;
 	vec3 normal;

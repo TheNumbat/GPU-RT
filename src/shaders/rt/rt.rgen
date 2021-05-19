@@ -472,7 +472,7 @@ void reservoir_sample(inout TraceInfo trace, HitInfo hit, MatInfo mat, ShadeInfo
 		vec3 old_contrib = old_g * old_light_atten * old_res.emissive;
 		float old_pHat = luma(old_contrib);
 		
-		old_res.n_seen = min(20 * new_res.n_seen, old_res.n_seen);
+		old_res.n_seen = min(uniforms.restir.temporal_multiplier * new_res.n_seen, old_res.n_seen);
 		res_update(seed, temporal_res, old_pHat * old_res.w * old_res.n_seen, old_res.pos, old_res.normal, old_res.emissive);
 
 		temporal_res.n_seen = new_res.n_seen + old_res.n_seen;

@@ -291,7 +291,7 @@ void GPURT::UIsidebar() {
     change = change || ImGui::Combo("BRDF", &rt_pipe.brdf, brdfs, 2);
     change = change || ImGui::Combo("Debug", &rt_pipe.debug_view, debug_views, 4);
     
-    if(rt_pipe.integrator == 3) {
+    if(rt_pipe.integrator == 3 || rt_pipe.integrator == 4) {
         change = change || ImGui::SliderInt("Res", &rt_pipe.res_samples, 1, 32);
         change = change || ImGui::Checkbox("Temporal Reuse", &rt_pipe.use_temporal);
         if(ImGui::Button("Reset Reservoirs")) {

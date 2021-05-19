@@ -227,7 +227,7 @@ void RTPipe::bind_temporal_stuff(VkCommandBuffer cmds) {
     res_b.range = VK_WHOLE_SIZE;
 
     VkDescriptorBufferInfo prev_res_b = {};
-    res_b.buffer = even ? res1->buf : res0->buf;
+    prev_res_b.buffer = even ? res1->buf : res0->buf;
     prev_res_b.offset = 0;
     prev_res_b.range = VK_WHOLE_SIZE;
 

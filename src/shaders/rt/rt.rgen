@@ -433,8 +433,6 @@ void reservoir_sample(inout TraceInfo trace, HitInfo hit, MatInfo mat, ShadeInfo
 	new_res.w = (1 / pHat) * (new_res.w_sum / new_res.n_seen);
 	if(pHat == 0 || visibility(hit.pos, new_res.pos)) {
 		new_res.w = 0;
-		new_res.w_sum = 0;
-		new_res.n_seen = 0;
 	}
 
 	for(;;) {
@@ -472,7 +470,7 @@ void reservoir_sample(inout TraceInfo trace, HitInfo hit, MatInfo mat, ShadeInfo
 		vec3 old_contrib = old_g * old_light_atten * old_res.emissive;
 		float old_pHat = luma(old_contrib);
 		
-		old_res.n_seen = min(uniforms.restir.temporal_multiplier * new_res.n_seen, old_res.n_seen);
+		old_res.n_seen = min(20 * new_res.n_seen, old_res.n_seen);
 		res_update(seed, temporal_res, old_pHat * old_res.w * old_res.n_seen, old_res.pos, old_res.normal, old_res.emissive);
 
 		temporal_res.n_seen = new_res.n_seen + old_res.n_seen;
@@ -483,8 +481,8 @@ void reservoir_sample(inout TraceInfo trace, HitInfo hit, MatInfo mat, ShadeInfo
 		float new_g = abs(dot(temporal_res.normal, new_wi)) / dot(new_dir, new_dir);
 		vec3 new_contrib = new_g * new_light_atten * temporal_res.emissive;
 		float new_pHat = luma(new_contrib);
-		temporal_res.w = (1 / pHat) * (temporal_res.w_sum / temporal_res.n_seen);
-		if(pHat == 0 || temporal_res.n_seen == 0) temporal_res.w = 0;
+		temporal_res.w = (1 / new_pHat) * (temporal_res.w_sum / temporal_res.n_seen);
+		if(new_pHat == 0 || temporal_res.n_seen == 0) temporal_res.w = 0;
 
 		new_res = temporal_res;
 		break;

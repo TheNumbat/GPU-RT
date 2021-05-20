@@ -3,7 +3,7 @@
 
 #include <optional>
 #include <sf_libs/stb_image.h>
-#include <string>
+#include <cstring>
 #include <util/files.h>
 #include <vector>
 

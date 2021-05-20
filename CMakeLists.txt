@@ -77,7 +77,7 @@ set_target_properties(gpu-rt PROPERTIES CXX_STANDARD 20 CXX_EXTENSIONS OFF)
 if(MSVC)
     target_compile_options(gpu-rt PRIVATE /MP /W4 /WX /wd4201 /wd4324 /wd4840 /wd4100 /wd4267 /fp:fast)
 else()
-    target_compile_options(gpu-rt PRIVATE -Wall -fconcepts -Wextra -Werror -Wno-missing-braces -Wno-reorder -ffast-math -Wno-unused-parameter)
+    target_compile_options(gpu-rt PRIVATE -Wall -fconcepts -Wextra -Wno-missing-braces -Wno-reorder -ffast-math -Wno-unused-parameter)
 endif()
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)

@@ -5,7 +5,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # define project
 
-project(fcpw-gpu VERSION 0.2 DESCRIPTION "fcpw-gpu" LANGUAGES CXX)
+project(gpu-rt VERSION 0.2 DESCRIPTION "GPU-RT" LANGUAGES CXX)
 
 # define sources
 
@@ -68,21 +68,21 @@ endif()
 # define executable
 
 if(WIN32)
-    add_executable(fcpw-gpu WIN32 ${SOURCES_CLIENT})
+    add_executable(gpu-rt WIN32 ${SOURCES_CLIENT})
 else()
-    add_executable(fcpw-gpu ${SOURCES_CLIENT})
+    add_executable(gpu-rt ${SOURCES_CLIENT})
 endif()
-set_target_properties(fcpw-gpu PROPERTIES CXX_STANDARD 20 CXX_EXTENSIONS OFF)
+set_target_properties(gpu-rt PROPERTIES CXX_STANDARD 20 CXX_EXTENSIONS OFF)
 
 if(MSVC)
-    target_compile_options(fcpw-gpu PRIVATE /MP /W4 /WX /wd4201 /wd4324 /wd4840 /wd4100 /wd4267 /fp:fast)
+    target_compile_options(gpu-rt PRIVATE /MP /W4 /WX /wd4201 /wd4324 /wd4840 /wd4100 /wd4267 /fp:fast)
 else()
-    target_compile_options(fcpw-gpu PRIVATE -Wall -fconcepts -Wextra -Werror -Wno-missing-braces -Wno-reorder -ffast-math -Wno-unused-parameter)
+    target_compile_options(gpu-rt PRIVATE -Wall -fconcepts -Wextra -Werror -Wno-missing-braces -Wno-reorder -ffast-math -Wno-unused-parameter)
 endif()
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
-target_link_libraries(fcpw-gpu PRIVATE Threads::Threads)
+target_link_libraries(gpu-rt PRIVATE Threads::Threads)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address -fno-omit-frame-pointer")
@@ -113,21 +113,21 @@ find_program(GLSLC glslc)
     target_sources(${TARGET} PRIVATE ${current-output-path})
 endfunction(add_shader)
 
-add_shader(fcpw-gpu "quad.vert")
-add_shader(fcpw-gpu "out.frag")
-add_shader(fcpw-gpu "tonemap.frag")
+add_shader(gpu-rt "quad.vert")
+add_shader(gpu-rt "out.frag")
+add_shader(gpu-rt "tonemap.frag")
 
-add_shader(fcpw-gpu "mesh.vert")
-add_shader(fcpw-gpu "mesh.frag")
+add_shader(gpu-rt "mesh.vert")
+add_shader(gpu-rt "mesh.frag")
 
-add_shader(fcpw-gpu "rt/rt.rchit")
-add_shader(fcpw-gpu "rt/rt.rmiss")
-add_shader(fcpw-gpu "rt/rt.rgen")
+add_shader(gpu-rt "rt/rt.rchit")
+add_shader(gpu-rt "rt/rt.rmiss")
+add_shader(gpu-rt "rt/rt.rgen")
 
 # define include paths
 
-target_include_directories(fcpw-gpu PRIVATE "deps/")
-target_include_directories(fcpw-gpu PRIVATE "src/")
+target_include_directories(gpu-rt PRIVATE "deps/")
+target_include_directories(gpu-rt PRIVATE "src/")
 
 # build dependencies
 
@@ -136,34 +136,34 @@ add_subdirectory("deps/sf_libs/")
 add_subdirectory("deps/nfd/")
 
 find_package(Vulkan REQUIRED FATAL_ERROR)
-target_include_directories(fcpw-gpu PRIVATE ${VULKAN_INCLUDE_DIRS})
+target_include_directories(gpu-rt PRIVATE ${VULKAN_INCLUDE_DIRS})
 
 # link libraries
 
-target_link_libraries(fcpw-gpu PRIVATE imgui)
-target_link_libraries(fcpw-gpu PRIVATE sf_libs)
-target_link_libraries(fcpw-gpu PRIVATE nfd)
-target_link_libraries(fcpw-gpu PRIVATE ${Vulkan_LIBRARY})
+target_link_libraries(gpu-rt PRIVATE imgui)
+target_link_libraries(gpu-rt PRIVATE sf_libs)
+target_link_libraries(gpu-rt PRIVATE nfd)
+target_link_libraries(gpu-rt PRIVATE ${Vulkan_LIBRARY})
 
 if(WIN32)
-    target_include_directories(fcpw-gpu PRIVATE "deps/win")
+    target_include_directories(gpu-rt PRIVATE "deps/win")
     if(MSVC)
         set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /IGNORE:4098 /IGNORE:4099")
     endif()
     add_definitions(-DWIN32_LEAN_AND_MEAN)
-    target_link_libraries(fcpw-gpu PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/deps/win/SDL2/SDL2main.lib")
-    target_link_libraries(fcpw-gpu PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/deps/win/SDL2/SDL2.lib")
-    target_link_libraries(fcpw-gpu PRIVATE Winmm)
-    target_link_libraries(fcpw-gpu PRIVATE Version)
-    target_link_libraries(fcpw-gpu PRIVATE Setupapi)
-    target_link_libraries(fcpw-gpu PRIVATE Shcore)
+    target_link_libraries(gpu-rt PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/deps/win/SDL2/SDL2main.lib")
+    target_link_libraries(gpu-rt PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/deps/win/SDL2/SDL2.lib")
+    target_link_libraries(gpu-rt PRIVATE Winmm)
+    target_link_libraries(gpu-rt PRIVATE Version)
+    target_link_libraries(gpu-rt PRIVATE Setupapi)
+    target_link_libraries(gpu-rt PRIVATE Shcore)
 endif()
 
 if(LINUX)
-    target_link_libraries(fcpw-gpu PRIVATE SDL2)
+    target_link_libraries(gpu-rt PRIVATE SDL2)
 endif()
 
 if(APPLE)
-	target_link_libraries(fcpw-gpu PRIVATE ${SDL2_LIBRARIES})
+	target_link_libraries(gpu-rt PRIVATE ${SDL2_LIBRARIES})
 endif()
 

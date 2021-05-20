@@ -124,10 +124,6 @@ add_shader(fcpw-gpu "rt/rt.rchit")
 add_shader(fcpw-gpu "rt/rt.rmiss")
 add_shader(fcpw-gpu "rt/rt.rgen")
 
-add_shader(fcpw-gpu "rquery.rchit")
-add_shader(fcpw-gpu "rquery.rmiss")
-add_shader(fcpw-gpu "rquery.rgen")
-
 # define include paths
 
 target_include_directories(fcpw-gpu PRIVATE "deps/")

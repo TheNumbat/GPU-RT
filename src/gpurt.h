@@ -33,6 +33,7 @@ private:
     void build_pipe();
     void build_pass();
     void build_rt();
+    void save_rt();
 
     static inline const char* scene_file_types = "dae,obj,fbx,glb,gltf,3ds,blend,stl,ply";
     static inline const char* image_file_types = "exr,hdr,hdri,jpg,jpeg,png,tga,bmp,psd,gif";

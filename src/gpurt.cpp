@@ -6,6 +6,7 @@
 #include <imgui/imgui.h>
 #include <nfd/nfd.h>
 #include <util/image.h>
+#include <sf_libs/stb_image_write.h>
 
 GPURT::GPURT(Window& window, std::string scene_file) : window(window), cam(window.drawable()) {
 
@@ -165,12 +166,15 @@ void GPURT::build_pass() {
 void GPURT::build_images() {
 
     VK::Manager& vk = VK::vk();
+    
     VkExtent2D ext = vk.extent();
+    // VkExtent2D ext = {3840, 2160};
+
     for(Frame& f : frames) {
 
         f.color->recreate(ext.width, ext.height, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
                           VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                              VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                              VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
                           VMA_MEMORY_USAGE_GPU_ONLY);
         f.depth->recreate(ext.width, ext.height, vk.find_depth_format(), VK_IMAGE_TILING_OPTIMAL,
                           VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
@@ -192,7 +196,9 @@ void GPURT::build_images() {
 void GPURT::build_pipe() {
 
     VK::Manager& vk = VK::vk();
+    
     VkExtent2D ext = vk.extent();
+    // VkExtent2D ext = {3840, 2160};
 
     effect_pipe.recreate(effect_pass, ext);
     mesh_pipe.recreate(mesh_pass, ext);
@@ -245,6 +251,12 @@ void GPURT::load_scene() {
 
     rebuild_blas = rebuild_tlas = true;
     build_accel();
+}
+
+void GPURT::save_rt() {
+    auto& buf = frames[VK::vk().frame()].color;
+    Util::Image img = buf->read();
+    stbi_write_png("out.png", buf->w, buf->h, 4, img.data(), 3840 * 4);
 }
 
 void GPURT::UIsidebar() {
@@ -307,6 +319,9 @@ void GPURT::UIsidebar() {
     ImGui::DragFloat("Gamma", &effect_pipe.gamma, 0.01f, 0.01f, 5.0f);
     ImGui::SliderInt("Tonemap", &effect_pipe.tonemap_type, 0, 2);
 
+    if(ImGui::Button("Save")) {
+        save_rt();
+    }
     ImGui::Separator();
 
     if(!scene.empty()) {

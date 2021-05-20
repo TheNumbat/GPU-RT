@@ -58,15 +58,15 @@ void Camera::look_at(Vec3 cent, Vec3 pos) {
 void Camera::reset() {
     vert_fov = 90.0f;
     aspect_ratio = 1.7778f;
-    rot = Quat::euler(Vec3(-45.0f, 45.0f, 0.0f));
+    rot = Quat{0.059338f, 0.39328f, 0.025433f, -0.91759f};
     near_plane = 0.01f;
-    radius = 5.0f;
+    radius = 2.0f;
     radius_sens = 0.25f;
     move_sens = 0.015f;
     orbit_sens = 0.2f;
     aperture = 0.0f;
     focal_dist = 1.0f;
-    looking_at = Vec3();
+    looking_at = Vec3(-2.21737f, -2.33f, 2.7778f);
     update_pos();
 }
 

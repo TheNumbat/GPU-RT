@@ -113,6 +113,7 @@ struct Image {
     void transition(VkCommandBuffer& cmds, VkImageLayout old_l, VkImageLayout new_l);
 
     void write(const Util::Image& img);
+    Util::Image read();
 
     VkImage img = VK_NULL_HANDLE;
     unsigned int w = 0;

@@ -14,6 +14,9 @@ struct Image {
     explicit Image() = default;
     ~Image() = default;
 
+    explicit Image(unsigned int w, unsigned int h, std::vector<unsigned char>&& data) 
+        : _w(w), _h(h), _data(std::move(data)) {}
+
     Image(const Image& src) = delete;
     Image& operator=(const Image& src) = delete;
 

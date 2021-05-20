@@ -284,6 +284,35 @@ void Image::recreate(unsigned int width, unsigned int height, VkFormat fmt, VkIm
     VK_CHECK(vmaCreateImage(vk().gpu_alloc, &img_info, &alloc_info, &img, &mem, nullptr));
 }
 
+Util::Image Image::read() {
+
+    VkCommandBuffer cmds = vk().begin_one_time();
+
+    transition(cmds, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+
+    assert(format == VK_FORMAT_R8G8B8A8_SRGB);
+    Buffer staging(w * h * 4, VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+
+    VkExtent3D ext = {};
+    ext.width = w;
+    ext.height = h;
+    ext.depth = 1;
+    VkBufferImageCopy copy = {};
+    copy.imageExtent = ext;
+    copy.imageSubresource.layerCount = 1;
+    copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    vkCmdCopyImageToBuffer(cmds, img, layout, staging.buf, 1, &copy);
+
+    transition(cmds, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+    vk().end_one_time(cmds);
+
+    std::vector<unsigned char> data(w * h * 4);
+    staging.read(data.data(), data.size());
+
+    return Util::Image(w, h, std::move(data));
+}
+
 void Image::write(const Util::Image& data) {
 
     VkCommandBuffer cmds = vk().begin_one_time();

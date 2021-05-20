@@ -45,9 +45,9 @@ struct RTPipe {
     bool use_rr = true;
     bool use_metalness = false;
     bool use_qmc = false;
-    bool reset_res = false;
     bool use_temporal = true;
     int integrator = 0;
+    int temporal_scale = 16;
     int brdf = 0;
     int debug_view = 0;
     int res_samples = 4;
@@ -92,7 +92,7 @@ private:
         int max_depth;
         int use_normal_map;
         int use_metalness;
-        int reset_res;
+        int use_temporal;
         int integrator;
         int brdf;
         int debug_view;

@@ -50,8 +50,10 @@ void RTPipe::build_desc(const Scene& scene) {
             Scene_Light light;
             light.index = obj_to_idx[obj.id()];
             light.n_triangles = obj.mesh().inds().size() / 3;
-            light.bmin = Vec4{obj.mesh().bbox().min, 0.0f};
-            light.bmax = Vec4{obj.mesh().bbox().max, 0.0f};
+            BBox box = obj.mesh().bbox();
+            box.transform(descs[light.index].model);
+            light.bmin = Vec4{box.min, 0.0f};
+            light.bmax = Vec4{box.max, 0.0f};
             lights.push_back(light);
         }
     });
@@ -125,7 +127,7 @@ void RTPipe::update_uniforms(const Camera& cam) {
     ubo.camera.iP = ubo.camera.P.inverse();
     ubo.restir.new_samples = res_samples;
     ubo.restir.prev_PV = old_cam.P * old_cam.V;
-    ubo.restir.temporal_multiplier = consts.max_frame * res_samples;
+    ubo.restir.temporal_multiplier = temporal_scale;
 
     if(consts.frame >= 0 && std::memcmp(&ubo.camera, &old_cam, sizeof(CameraConstants))) {
         reset_frame();
@@ -361,9 +363,8 @@ bool RTPipe::trace(const Camera& cam, VkCommandBuffer& cmds, VkExtent2D ext) {
     consts.use_rr = use_rr;
     consts.max_frame = max_frames;
     consts.qmc = use_qmc;
-    consts.reset_res = reset_res || !use_temporal;
+    consts.use_temporal = use_temporal;
     consts.debug_view = debug_view;
-    reset_res = false;
     consts.frame++;
 
     bind_temporal_stuff(cmds);

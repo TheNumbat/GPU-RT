@@ -85,7 +85,7 @@ layout(push_constant) uniform Constants
 	int max_depth;
 	int use_normal_map;
 	int use_metalness;
-	int reset_res;
+	int use_temporal;
 	int integrator;
 	int brdf;
 	int debug_view;

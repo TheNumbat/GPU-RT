@@ -294,9 +294,8 @@ void GPURT::UIsidebar() {
     if(rt_pipe.integrator == 3 || rt_pipe.integrator == 4) {
         change = change || ImGui::SliderInt("Res", &rt_pipe.res_samples, 1, 32);
         change = change || ImGui::Checkbox("Temporal Reuse", &rt_pipe.use_temporal);
-        if(ImGui::Button("Reset Reservoirs")) {
-            rt_pipe.reset_res = true;
-            change = true;
+        if(rt_pipe.use_temporal) {
+            change = change || ImGui::SliderInt("Temporal", &rt_pipe.temporal_scale, 1, 32);
         }
     }
     

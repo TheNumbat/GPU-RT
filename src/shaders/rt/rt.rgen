@@ -410,7 +410,29 @@ void integrate_direct(inout TraceInfo trace, HitInfo hit, MatInfo mat, ShadeInfo
 	}
 }
 
-void reservoir_sample(inout TraceInfo trace, HitInfo hit, MatInfo mat, ShadeInfo shade) {
+Reservoir prev_res;
+
+float update_weight(inout Reservoir res, HitInfo hit, MatInfo mat, ShadeInfo shade) {
+
+	if(res.n_seen == 0) {
+		res.w = 0;
+		return 0;
+	}
+
+	vec3 dir = res.pos - hit.pos;
+	vec3 wi = normalize(dir);
+	vec3 light_atten = MAT_eval(mat, shade, wi);
+	float g = abs(dot(res.normal, wi)) / dot(dir, dir);
+	vec3 contrib = g * light_atten * res.emissive;
+	float pHat = luma(contrib);
+	res.w = (1 / pHat) * (res.w_sum / res.n_seen);
+	if(pHat == 0) {
+		res.w = 0;
+	}
+	return pHat;
+}
+
+void reservoir_sample(inout TraceInfo trace, HitInfo hit, MatInfo mat, ShadeInfo shade, bool first) {
 
 	Reservoir new_res = res_new();
 
@@ -424,72 +446,51 @@ void reservoir_sample(inout TraceInfo trace, HitInfo hit, MatInfo mat, ShadeInfo
 		res_update(seed, new_res, luma(contrib), light.pos, light.normal, light.emissive);
 	}
 
-	vec3 dir = new_res.pos - hit.pos;
-	vec3 wi = normalize(dir);
-	vec3 light_atten = MAT_eval(mat, shade, wi);
-	float g = abs(dot(new_res.normal, wi)) / dot(dir, dir);
-	vec3 contrib = g * light_atten * new_res.emissive;
-	float pHat = luma(contrib);
-	new_res.w = (1 / pHat) * (new_res.w_sum / new_res.n_seen);
-	if(pHat == 0 || visibility(hit.pos, new_res.pos)) {
+	float new_pHat = update_weight(new_res, hit, mat, shade);
+	if(new_pHat != 0 && visibility(hit.pos, new_res.pos)) {
 		new_res.w = 0;
 	}
 
 	for(;;) {
-		vec4 prev_pos = uniforms.restir.prev_PV * vec4(hit.pos, 1.0f);
-		prev_pos.xyz /= prev_pos.w;
-		prev_pos.xy = (prev_pos.xy + 1.0f) * 0.5f;
-		
-		if(!(consts.reset_res == 0 && 
-		   all(greaterThan(prev_pos.xy, vec2(0))) &&
-		   all(lessThan(prev_pos.xy, vec2(1))))) break;
+		if(first && consts.use_temporal == 1) {
+			vec4 prev_pos = uniforms.restir.prev_PV * vec4(hit.pos, 1.0f);
+			prev_pos.xyz /= prev_pos.w;
+			prev_pos.xy = (prev_pos.xy + 1.0f) * 0.5f;
+			
+			if(!(all(greaterThan(prev_pos.xy, vec2(0))) &&
+				 all(lessThan(prev_pos.xy, vec2(1))))) break;
 
-		vec2 prev_frag = prev_pos.xy;
-		vec3 old_pos = texture(ppos_image, vec2(prev_frag)).xyz;
-		vec3 old_norm = texture(pnorm_image, vec2(prev_frag)).xyz;
-		vec3 old_alb = texture(palb_image, vec2(prev_frag)).xyz;
+			vec2 prev_frag = prev_pos.xy;
+			vec3 old_pos = texture(ppos_image, vec2(prev_frag)).xyz;
+			vec3 old_norm = texture(pnorm_image, vec2(prev_frag)).xyz;
+			vec3 old_alb = texture(palb_image, vec2(prev_frag)).xyz;
 
-		vec3 posdiff = old_pos - hit.pos;
-		if(dot(posdiff, posdiff) > 0.01) break;
-		vec3 albdiff = old_alb - mat.albedo;
-		if(dot(albdiff, albdiff) > 0.01) break;
-		if(dot(old_norm, shade.N) < 0.5) break;
+			vec3 posdiff = old_pos - hit.pos;
+			if(dot(posdiff, posdiff) > 0.01) break;
+			vec3 albdiff = old_alb - mat.albedo;
+			if(dot(albdiff, albdiff) > 0.01) break;
+			if(dot(old_norm, shade.N) < 0.5) break;
 
-		vec2 ssize = vec2(gl_LaunchSizeEXT);
-		ivec2 prev_fragcoord = ivec2(prev_pos.xy * ssize);
-		Reservoir old_res = prevFrameReservoirs[prev_fragcoord.y * gl_LaunchSizeEXT.x + prev_fragcoord.x];
+			vec2 ssize = vec2(gl_LaunchSizeEXT);
+			ivec2 prev_fragcoord = ivec2(prev_pos.xy * ssize);
+			prev_res = prevFrameReservoirs[prev_fragcoord.y * gl_LaunchSizeEXT.x + prev_fragcoord.x];
+		}
 
 		Reservoir temporal_res = res_new();
 
-		res_update(seed, temporal_res, pHat * new_res.w * new_res.n_seen, new_res.pos, new_res.normal, new_res.emissive);
+		res_update(seed, temporal_res, new_pHat * new_res.w * new_res.n_seen, new_res.pos, new_res.normal, new_res.emissive);
 
-		vec3 old_dir = old_res.pos - hit.pos;
-		vec3 old_wi = normalize(old_dir);
-		vec3 old_light_atten = MAT_eval(mat, shade, old_wi);
-		float old_g = abs(dot(old_res.normal, old_wi)) / dot(old_dir, old_dir);
-		vec3 old_contrib = old_g * old_light_atten * old_res.emissive;
-		float old_pHat = luma(old_contrib);
+		float old_pHat = update_weight(prev_res, hit, mat, shade);
 		
-		old_res.n_seen = min(20 * new_res.n_seen, old_res.n_seen);
-		res_update(seed, temporal_res, old_pHat * old_res.w * old_res.n_seen, old_res.pos, old_res.normal, old_res.emissive);
+		prev_res.n_seen = min(uniforms.restir.temporal_multiplier * new_res.n_seen, prev_res.n_seen);
+		res_update(seed, temporal_res, old_pHat * prev_res.w * prev_res.n_seen, prev_res.pos, prev_res.normal, prev_res.emissive);
 
-		temporal_res.n_seen = new_res.n_seen + old_res.n_seen;
+		temporal_res.n_seen = new_res.n_seen + prev_res.n_seen;
 
-		vec3 new_dir = temporal_res.pos - hit.pos;
-		vec3 new_wi = normalize(new_dir);
-		vec3 new_light_atten = MAT_eval(mat, shade, new_wi);
-		float new_g = abs(dot(temporal_res.normal, new_wi)) / dot(new_dir, new_dir);
-		vec3 new_contrib = new_g * new_light_atten * temporal_res.emissive;
-		float new_pHat = luma(new_contrib);
-		temporal_res.w = (1 / new_pHat) * (temporal_res.w_sum / temporal_res.n_seen);
-		if(new_pHat == 0 || temporal_res.n_seen == 0) temporal_res.w = 0;
-
+		float final_pHat = update_weight(temporal_res, hit, mat, shade);
 		new_res = temporal_res;
 		break;
 	}
-	
-	uint res_idx = gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.x;
-	reservoirs[res_idx] = new_res;
 	
 	if(new_res.w != 0) {
 		vec3 dir = new_res.pos - hit.pos;
@@ -499,9 +500,11 @@ void reservoir_sample(inout TraceInfo trace, HitInfo hit, MatInfo mat, ShadeInfo
 		float g = abs(dot(new_res.normal, wi)) / dot(dir, dir);
 		trace.acc += new_res.w * contrib * g;
 	}
+
+	prev_res = new_res;
 }
 
-void integrate_restir(inout TraceInfo trace, HitInfo hit, MatInfo mat, ShadeInfo shade, bool d_only) {
+void integrate_restir(inout TraceInfo trace, HitInfo hit, MatInfo mat, ShadeInfo shade, bool d_only, bool first) {
 
 	if(any(greaterThan(mat.emissive, vec3(0)))) {
 	    trace.acc += mat.emissive * trace.throughput * trace.mis;
@@ -519,7 +522,7 @@ void integrate_restir(inout TraceInfo trace, HitInfo hit, MatInfo mat, ShadeInfo
 
 	} else {
 		
-		if(trace.depth == 0) reservoir_sample(trace, hit, mat, shade);
+		if(trace.depth == 0) reservoir_sample(trace, hit, mat, shade, first);
 
 		vec3 wi_brdf;
 		if(!MAT_sample(seed, mat, shade, wi_brdf)) {
@@ -569,6 +572,8 @@ void main() {
     vec3 camera_o = (uniforms.iV * vec4(0, 0, 0, 1)).xyz;
 	vec3 gbuf_pos = vec3(0), gbuf_norm = vec3(0), gbuf_albedo = vec3(0);
 
+	prev_res = res_new();
+
     for(int s = 0; s < consts.samples; s++) {
 
         TraceInfo trace;
@@ -609,9 +614,9 @@ void main() {
             } else if(consts.integrator == 2) {
                 integrate_mis(trace, hit, mat, shade);
             } else if(consts.integrator == 3) {
-				integrate_restir(trace, hit, mat, shade, true);
+				integrate_restir(trace, hit, mat, shade, true, s == 0);
 			} else if(consts.integrator == 4) {
-				integrate_restir(trace, hit, mat, shade, false);
+				integrate_restir(trace, hit, mat, shade, false, s == 0);
 			}
 
             if(consts.use_rr == 1) {
@@ -624,6 +629,11 @@ void main() {
 
         acc += trace.acc;
     }
+
+	if(consts.integrator == 3 || consts.integrator == 4) {
+		uint res_idx = gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.x;
+		reservoirs[res_idx] = prev_res;
+	}
 
     vec3 avg = acc / consts.samples;
     if(consts.frame > 0) {

@@ -13,3 +13,4 @@ The build process is the same as [Scotty3D](https://cmu-graphics.github.io/Scott
 
 Dependencies for windows are all included, except `glslc` (the SPIR-V shader compiler). On macOS/linux, it will also require `libsdl2` and `libvulkan-dev`. 
 
+![showcase render](https://raw.githubusercontent.com/TheNumbat/GPU-RT/main/render.png)

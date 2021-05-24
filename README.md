@@ -1,7 +1,7 @@
 
 # GPU-RT
 
-This is a real-time path tracing using Vulkan 1.2's cross platform ray tracing extension. It implements a few different material models and integrators, and can load GLTF scenes. In particular, it implements ReSTIR for direct lighting.
+This is a real-time path tracer based on Vulkan 1.2's cross platform ray tracing extension. It implements a few different material models and integrators, and can load GLTF scenes. In particular, it implements ReSTIR for direct lighting.
 
 ## FCPW-GPU
 

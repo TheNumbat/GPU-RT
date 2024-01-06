@@ -5,8 +5,8 @@
 #include <chrono>
 #include <imgui/imgui.h>
 #include <nfd/nfd.h>
-#include <util/image.h>
 #include <sf_libs/stb_image_write.h>
+#include <util/image.h>
 
 GPURT::GPURT(Window& window, std::string scene_file) : window(window), cam(window.drawable()) {
 
@@ -43,16 +43,16 @@ void GPURT::render() {
         rt_pipe.use_accel(TLAS);
         rt_pipe.update_uniforms(cam);
         rt_pipe.trace(cam, cmds, {rt_target->w, rt_target->h});
-        
+
         rt_target->transition(cmds, VK_IMAGE_LAYOUT_GENERAL,
-                                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
         effect_pass->begin(cmds, f.ef_fb, {});
         effect_pipe.tonemap(cmds, rt_target_view);
         effect_pass->end(cmds);
 
         rt_target->transition(cmds, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                                VK_IMAGE_LAYOUT_GENERAL);
+                              VK_IMAGE_LAYOUT_GENERAL);
 
     } else {
         VkClearValue col, depth;
@@ -63,7 +63,8 @@ void GPURT::render() {
         mesh_pass->begin(cmds, f.m_fb, {col, depth});
 
         scene.for_objs([&, this](const Object& obj) {
-            obj.mesh().render(cmds, mesh_pipe.pipe, Mat4::scale(Vec3{scene.scale}) * obj.pose.transform());
+            obj.mesh().render(cmds, mesh_pipe.pipe,
+                              Mat4::scale(Vec3{scene.scale}) * obj.pose.transform());
         });
 
         mesh_pass->end(cmds);
@@ -166,7 +167,7 @@ void GPURT::build_pass() {
 void GPURT::build_images() {
 
     VK::Manager& vk = VK::vk();
-    
+
     VkExtent2D ext = vk.extent();
     // VkExtent2D ext = {3840, 2160};
 
@@ -185,10 +186,9 @@ void GPURT::build_images() {
         f.depth_view->recreate(f.depth, VK_IMAGE_ASPECT_DEPTH_BIT);
     }
 
-    rt_target->recreate(ext.width, ext.height, VK_FORMAT_R32G32B32A32_SFLOAT,
-                            VK_IMAGE_TILING_OPTIMAL,
-                            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-                            VMA_MEMORY_USAGE_GPU_ONLY);
+    rt_target->recreate(
+        ext.width, ext.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
     rt_target->transition(VK_IMAGE_LAYOUT_GENERAL);
     rt_target_view->recreate(rt_target, VK_IMAGE_ASPECT_COLOR_BIT);
 }
@@ -196,7 +196,7 @@ void GPURT::build_images() {
 void GPURT::build_pipe() {
 
     VK::Manager& vk = VK::vk();
-    
+
     VkExtent2D ext = vk.extent();
     // VkExtent2D ext = {3840, 2160};
 
@@ -228,7 +228,9 @@ void GPURT::build_accel() {
     if(rebuild_tlas) {
 
         BLAS_T.clear();
-        scene.for_objs([this](const Object& obj) { BLAS_T.push_back(Mat4::scale(Vec3{scene.scale}) * obj.pose.transform()); });
+        scene.for_objs([this](const Object& obj) {
+            BLAS_T.push_back(Mat4::scale(Vec3{scene.scale}) * obj.pose.transform());
+        });
 
         TLAS.drop();
         TLAS->recreate(BLAS, BLAS_T);
@@ -256,7 +258,7 @@ void GPURT::load_scene() {
 void GPURT::save_rt() {
     auto& buf = frames[VK::vk().frame()].color;
     Util::Image img = buf->read();
-    stbi_write_png("out.png", buf->w, buf->h, 4, img.data(), 3840 * 4);
+    stbi_write_png("out.png", buf->w, buf->h, 4, img.data(), buf->w * 4);
 }
 
 void GPURT::UIsidebar() {
@@ -277,7 +279,7 @@ void GPURT::UIsidebar() {
     ImGui::Separator();
 
     bool change = false;
-    
+
     change = change || ImGui::ColorEdit3("ClearCol", rt_pipe.clear.data);
     change = change || ImGui::ColorEdit3("EnvLight", rt_pipe.env.data);
     change = change || ImGui::DragFloat("Intensity", &rt_pipe.env_scale, 0.1f, 0.0f, FLT_MAX);
@@ -302,7 +304,7 @@ void GPURT::UIsidebar() {
     change = change || ImGui::Combo("Integrator", &rt_pipe.integrator, integrators, 5);
     change = change || ImGui::Combo("BRDF", &rt_pipe.brdf, brdfs, 2);
     change = change || ImGui::Combo("Debug", &rt_pipe.debug_view, debug_views, 4);
-    
+
     if(rt_pipe.integrator == 3 || rt_pipe.integrator == 4) {
         change = change || ImGui::SliderInt("Res", &rt_pipe.res_samples, 1, 32);
         change = change || ImGui::Checkbox("Temporal Reuse", &rt_pipe.use_temporal);
@@ -310,9 +312,9 @@ void GPURT::UIsidebar() {
             change = change || ImGui::SliderInt("Temporal", &rt_pipe.temporal_scale, 1, 32);
         }
     }
-    
+
     if(change) rt_pipe.reset_frame();
-    
+
     ImGui::Separator();
 
     ImGui::DragFloat("Exposure", &effect_pipe.exposure, 0.01f, 0.01f, 100.0f);
@@ -514,4 +516,3 @@ void GPURT::event(SDL_Event e) {
 
 void GPURT::apply_window_dim(Vec2 new_dim) {
 }
-

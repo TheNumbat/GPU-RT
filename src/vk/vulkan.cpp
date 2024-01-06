@@ -143,8 +143,7 @@ void Buffer::recreate(VkDeviceSize sz, VkBufferUsageFlags busage, VmaMemoryUsage
     VmaAllocationCreateInfo alloc_info = {};
     alloc_info.usage = mem_usage;
 
-    if(sz)
-        VK_CHECK(vmaCreateBuffer(vk().gpu_alloc, &buf_info, &alloc_info, &buf, &mem, nullptr));
+    if(sz) VK_CHECK(vmaCreateBuffer(vk().gpu_alloc, &buf_info, &alloc_info, &buf, &mem, nullptr));
 }
 
 void* Buffer::map() const {
@@ -195,7 +194,7 @@ void Buffer::to_image(VkCommandBuffer& cmds, const Image& image) {
 }
 
 void Buffer::write(const void* data, size_t dsize) {
-    
+
     if(!dsize) return;
     assert(dsize <= size);
 
@@ -206,7 +205,7 @@ void Buffer::write(const void* data, size_t dsize) {
 }
 
 void Buffer::read(void* data, size_t dsize) {
-    
+
     if(!dsize) return;
     assert(dsize <= size);
 
@@ -247,7 +246,7 @@ void Image::destroy() {
 }
 
 Image::Image(unsigned int width, unsigned int height, VkFormat format, VkImageTiling tiling,
-          VkImageUsageFlags img_usage, VmaMemoryUsage mem_usage) {
+             VkImageUsageFlags img_usage, VmaMemoryUsage mem_usage) {
     recreate(width, height, format, tiling, img_usage, mem_usage);
 }
 
@@ -808,7 +807,8 @@ void Accel::recreate(const std::vector<Drop<Accel>>& blas, const std::vector<Mat
     VkDeviceSize instances_size = instances.size() * sizeof(VkAccelerationStructureInstanceKHR);
 
     ibuf.recreate(instances_size,
-                  VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                  VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
+                      VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
                   VMA_MEMORY_USAGE_GPU_ONLY);
     ibuf.write_staged(instances.data(), instances_size);
 
@@ -1183,11 +1183,7 @@ void Manager::init_imgui() {
     init.CheckVkResultFn = vk_check_fn;
     ImGui_ImplVulkan_Init(&init, compositor.get_pass());
 
-    VkCommandBuffer create_buf = begin_one_time();
-    ImGui_ImplVulkan_CreateFontsTexture(create_buf);
-    end_one_time(create_buf);
-
-    ImGui_ImplVulkan_DestroyFontUploadObjects();
+    ImGui_ImplVulkan_CreateFontsTexture();
 }
 
 void Manager::end_one_time(VkCommandBuffer cmds) {
@@ -1317,7 +1313,7 @@ static VkBool32 debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT sev,
     }
 
     if(sev == VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
-        DEBUG_BREAK;
+        // DEBUG_BREAK;
     }
 
     bool is_error = (sev & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) &&

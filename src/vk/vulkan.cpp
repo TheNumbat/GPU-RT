@@ -840,7 +840,8 @@ void Accel::recreate(const std::vector<Drop<Accel>>& blas, const std::vector<Mat
         vk().device(), VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &build_info, &count, &size);
 
     abuf.recreate(size.accelerationStructureSize,
-                  VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR,
+                  VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR |
+                      VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
                   VMA_MEMORY_USAGE_GPU_ONLY);
 
     VkAccelerationStructureCreateInfoKHR create_info = {};
@@ -922,7 +923,8 @@ void Accel::recreate(const Mesh& mesh) {
         &maxPrimitiveCount, &size);
 
     abuf.recreate(size.accelerationStructureSize,
-                  VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR,
+                  VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR |
+                      VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
                   VMA_MEMORY_USAGE_GPU_ONLY);
 
     VkAccelerationStructureCreateInfoKHR create_info = {};
@@ -1667,6 +1669,8 @@ void Manager::create_instance() {
     info.inst_ext.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     info.dev_ext.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
+    info.dev_ext.push_back(VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
+    info.dev_ext.push_back(VK_KHR_RAY_QUERY_EXTENSION_NAME);
     info.dev_ext.push_back(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
     info.dev_ext.push_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
     info.dev_ext.push_back(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
